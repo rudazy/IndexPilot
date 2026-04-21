@@ -18,7 +18,7 @@ Next.js 14 app router, TS strict, Tailwind + shadcn/ui, wagmi v2 + viem v2, reac
 
 ## Current task
 
-Wave 1 complete. Build passes, typecheck clean, lint clean. Awaiting manual UI pass.
+Docs section added (2026-04-22). `/docs` + `/docs/[slug]` with sidebar nav, six pages written (Getting Started, Drift Detection, Setup Guide, Rebalance Plan, Executing on SoDEX, FAQ). Build passes, typecheck + lint clean. Awaiting manual UI pass.
 
 ## Completed this session
 
@@ -51,6 +51,18 @@ Wave 1 complete. Build passes, typecheck clean, lint clean. Awaiting manual UI p
 - `tsc --noEmit` → 0 errors
 - `eslint . --ext .ts,.tsx` → 0 errors, 0 warnings
 - `next build` → 7 static pages generated, `/api/prices` dynamic; only warning is Reown/WalletConnect config fetch (expected with placeholder projectId)
+
+**Phase 6 — docs section (2026-04-22)**
+- `app/docs/layout.tsx` — 240px fixed sidebar + content column, dark theme
+- `app/docs/_components/DocsSidebar.tsx` — active-state highlighting (#ff6a00), mobile hamburger + overlay, "Back to app" footer link
+- `app/docs/page.tsx` — redirects to `/docs/getting-started`
+- `app/docs/[slug]/page.tsx` — generateStaticParams for all six slugs, notFound() fallback, prev/next pagination
+- `app/docs/_lib/nav.ts` — sidebar nav source of truth (DOC_SECTIONS, type-safe DocSlug)
+- `app/docs/_content/*.tsx` — six content components, no placeholders
+- `.docs-prose` CSS in globals.css using `:where()` for zero-specificity defaults
+- Header: Docs nav link added between Index and Dashboard
+- Landing hero: subtle "How it works →" link under CTA buttons → /docs/getting-started
+- Build: 7 → 13 pages (all six doc slugs prerendered SSG), typecheck + lint clean
 
 ## README
 

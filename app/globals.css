@@ -96,6 +96,145 @@
   }
 }
 
+@layer components {
+  .docs-prose :where(h2) {
+    font-family: var(--font-display);
+    font-size: 30px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--color-fg);
+    margin-top: 48px;
+    margin-bottom: 16px;
+  }
+  .docs-prose :where(h2:first-child) {
+    margin-top: 0;
+  }
+  .docs-prose :where(h3) {
+    font-family: var(--font-display);
+    font-size: 22px;
+    line-height: 1.2;
+    color: var(--color-fg);
+    margin-top: 36px;
+    margin-bottom: 10px;
+  }
+  .docs-prose :where(p) {
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--color-fg-muted);
+    margin-bottom: 20px;
+  }
+  .docs-prose :where(p strong, li strong) {
+    color: var(--color-fg);
+    font-weight: 500;
+  }
+  .docs-prose :where(a) {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-decoration-color: var(--color-accent-dim);
+    text-underline-offset: 4px;
+    transition: text-decoration-color 150ms ease;
+  }
+  .docs-prose :where(a:hover) {
+    text-decoration-color: var(--color-accent);
+  }
+  .docs-prose :where(ul) {
+    list-style: disc;
+    padding-left: 22px;
+    margin-bottom: 20px;
+  }
+  .docs-prose :where(ol) {
+    list-style: decimal;
+    padding-left: 22px;
+    margin-bottom: 20px;
+  }
+  .docs-prose :where(li) {
+    font-size: 17px;
+    line-height: 1.65;
+    color: var(--color-fg-muted);
+    margin-bottom: 10px;
+  }
+  .docs-prose :where(li::marker) {
+    color: var(--color-fg-subtle);
+  }
+  .docs-prose :where(code) {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    color: var(--color-accent);
+    background: var(--color-surface-2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+  }
+  .docs-prose :where(pre) {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 24px 0;
+  }
+  .docs-prose :where(pre code) {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: var(--color-fg);
+    font-size: inherit;
+  }
+  .docs-prose :where(table) {
+    width: 100%;
+    font-size: 14px;
+    margin: 24px 0;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    overflow: hidden;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .docs-prose :where(thead) {
+    background: var(--color-surface-2);
+  }
+  .docs-prose :where(th) {
+    text-align: left;
+    padding: 12px 16px;
+    color: var(--color-fg-subtle);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+  .docs-prose :where(td) {
+    padding: 12px 16px;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-fg-muted);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+  }
+  .docs-prose :where(td:first-child) {
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .docs-prose :where(blockquote) {
+    border-left: 2px solid var(--color-accent);
+    padding: 4px 0 4px 20px;
+    margin: 24px 0;
+    color: var(--color-fg);
+    font-family: var(--font-display);
+    font-size: 19px;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .docs-prose :where(hr) {
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    margin: 40px 0;
+  }
+}
+
 @layer utilities {
   .text-numeric {
     font-family: var(--font-mono);

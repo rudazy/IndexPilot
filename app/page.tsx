@@ -53,6 +53,14 @@ function Hero() {
               </Button>
             </Link>
           </div>
+
+          <Link
+            href="/docs/getting-started"
+            className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)] hover:text-[color:var(--color-accent)] transition-colors"
+          >
+            How it works
+            <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
 
         <HeroPanel />

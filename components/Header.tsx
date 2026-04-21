@@ -34,6 +34,7 @@ export function Header({ variant = "default", className }: HeaderProps) {
 
         <nav className="hidden md:flex items-center gap-1">
           <NavLink href="/setup">Index</NavLink>
+          <NavLink href="/docs">Docs</NavLink>
           <NavLink href="/dashboard">Dashboard</NavLink>
         </nav>
 
