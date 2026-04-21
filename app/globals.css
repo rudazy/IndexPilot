@@ -1,0 +1,124 @@
+@import "tailwindcss";
+@import "@rainbow-me/rainbowkit/styles.css";
+
+@theme {
+  --color-bg: #0a0a0a;
+  --color-surface: #111111;
+  --color-surface-2: #161616;
+  --color-surface-3: #1c1c1c;
+  --color-border: #1f1f1f;
+  --color-border-strong: #2a2a2a;
+  --color-fg: #f5f5f5;
+  --color-fg-muted: #8a8a8a;
+  --color-fg-subtle: #5a5a5a;
+  --color-accent: #ff6a00;
+  --color-accent-hover: #ff8428;
+  --color-accent-dim: #3a1d08;
+  --color-success: #3fb96a;
+  --color-success-dim: #132b1c;
+  --color-warn: #d4a24a;
+  --color-warn-dim: #2e2414;
+  --color-danger: #e8553d;
+  --color-danger-dim: #2e1512;
+
+  --font-display: var(--font-display-serif), ui-serif, Georgia, serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+
+  --shadow-elev-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  --shadow-elev-2: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 16px 32px -16px rgba(0, 0, 0, 0.6);
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "ss01", "cv01", "cv11";
+    letter-spacing: -0.005em;
+  }
+
+  body {
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 100% 0%, rgba(255, 106, 0, 0.035) 0%, transparent 40%),
+      radial-gradient(circle at 0% 100%, rgba(255, 106, 0, 0.02) 0%, transparent 50%);
+  }
+
+  ::selection {
+    background: rgba(255, 106, 0, 0.25);
+    color: var(--color-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    font-weight: 400;
+  }
+
+  input,
+  button,
+  select,
+  textarea {
+    font-family: inherit;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer utilities {
+  .text-numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+  }
+
+  .hairline {
+    border-color: var(--color-border);
+  }
+
+  .fade-in-up {
+    animation: fade-in-up 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
