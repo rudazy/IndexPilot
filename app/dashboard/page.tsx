@@ -3,20 +3,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { RefreshCw, Settings2, AlertTriangle } from "lucide-react";
+import { RefreshCw, Settings2, AlertTriangle, Wallet, Inbox } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { WalletButton } from "@/components/WalletButton";
 import { PortfolioChart, ChartLegend } from "@/components/dashboard/PortfolioChart";
 import { TokenTable } from "@/components/dashboard/TokenTable";
 import { RebalancePanel } from "@/components/dashboard/RebalancePanel";
 import { ActivityLog } from "@/components/dashboard/ActivityLog";
+import { ApiCallLog } from "@/components/dashboard/ApiCallLog";
 import { PriceSourceTag } from "@/components/dashboard/PriceSourceTag";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useRebalance } from "@/hooks/useRebalance";
+import { useBriefing } from "@/hooks/useBriefing";
 import { appendActivity, loadActivity } from "@/lib/storage";
 import type { ActivityEvent } from "@/lib/types";
-import { formatUsd, uid } from "@/lib/utils";
+import { formatUsd, truncateAddress, uid } from "@/lib/utils";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -26,13 +29,29 @@ export default function DashboardPage() {
     prices,
     priceSource,
     fetchedAt,
+    walletAddress,
+    isWalletConnected,
+    hasHoldings,
     isLoading,
     isError,
     error,
     refetch,
-    resetHoldings,
   } = usePortfolio();
   const plan = useRebalance(portfolio);
+  const {
+    briefing,
+    meta: briefingMeta,
+    isLoading: briefingLoading,
+    isFetching: briefingFetching,
+    isError: briefingError,
+    error: briefingErrorObj,
+    refetch: refetchBriefing,
+  } = useBriefing(
+    hasHoldings ? portfolio : null,
+    hasHoldings ? plan : null,
+    prices,
+    config?.name ?? null,
+  );
 
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -82,13 +101,19 @@ export default function DashboardPage() {
           needsRebalance={needsRebalance}
           priceSource={priceSource}
           fetchedAt={fetchedAt}
+          walletAddress={walletAddress}
+          isWalletConnected={isWalletConnected}
           onRefresh={refetch}
         />
+
+        {!isWalletConnected && <ConnectWalletPrompt />}
+
+        {isWalletConnected && !hasHoldings && !isLoading && <EmptyWalletBanner />}
 
         {isError && (
           <div className="flex items-center gap-2 px-4 py-3 rounded-[8px] bg-[color:var(--color-danger-dim)] text-[color:var(--color-danger)] text-sm">
             <AlertTriangle className="h-4 w-4" />
-            Failed to load prices: {error?.message ?? "unknown error"}
+            Failed to load data: {error?.message ?? "unknown error"}
           </div>
         )}
 
@@ -101,8 +126,12 @@ export default function DashboardPage() {
               </span>
             </CardHeader>
             <CardBody>
-              {isLoading || !portfolio ? (
+              {!isWalletConnected ? (
+                <ChartEmpty label="Connect a wallet to see your allocation." />
+              ) : isLoading || !portfolio ? (
                 <ChartSkeleton />
+              ) : !hasHoldings ? (
+                <ChartEmpty label="No holdings detected on Ethereum mainnet." />
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -130,7 +159,9 @@ export default function DashboardPage() {
                 {portfolio?.holdings.length ?? 0} assets · drift vs target
               </span>
             </CardHeader>
-            {isLoading || !portfolio ? (
+            {!isWalletConnected ? (
+              <TableEmpty label="Connect a wallet to view your token balances." />
+            ) : isLoading || !portfolio ? (
               <TableSkeleton rows={config.allocations.length} />
             ) : (
               <TokenTable holdings={portfolio.holdings} />
@@ -143,12 +174,30 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle>Rebalance plan</CardTitle>
               <span className="text-xs text-[color:var(--color-fg-subtle)]">
-                AI-generated orders
+                Deterministic orders · AI briefing
               </span>
             </CardHeader>
             <CardBody>
-              {plan ? (
-                <RebalancePanel plan={plan} onRecompute={recordRebalance} />
+              {!isWalletConnected ? (
+                <p className="text-sm text-[color:var(--color-fg-subtle)]">
+                  Connect a wallet to generate a rebalance plan against your real holdings.
+                </p>
+              ) : !hasHoldings ? (
+                <p className="text-sm text-[color:var(--color-fg-subtle)]">
+                  Deposit one of the index tokens to your wallet to generate a rebalance plan.
+                </p>
+              ) : plan ? (
+                <RebalancePanel
+                  plan={plan}
+                  briefing={briefing}
+                  briefingMeta={briefingMeta}
+                  briefingLoading={briefingLoading}
+                  briefingFetching={briefingFetching}
+                  briefingError={briefingError}
+                  briefingErrorObj={briefingErrorObj}
+                  onRefreshBriefing={refetchBriefing}
+                  onRecompute={recordRebalance}
+                />
               ) : (
                 <p className="text-sm text-[color:var(--color-fg-subtle)]">
                   Waiting for price data.
@@ -172,12 +221,12 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <DevFooter
-          onResetHoldings={() => {
-            resetHoldings();
-            setActivity([]);
-          }}
+        <ApiCallLog />
+
+        <DataFooter
           pricesCount={prices.length}
+          isWalletConnected={isWalletConnected}
+          walletAddress={walletAddress}
         />
       </main>
     </div>
@@ -190,13 +239,17 @@ function HeroBand({
   needsRebalance,
   priceSource,
   fetchedAt,
+  walletAddress,
+  isWalletConnected,
   onRefresh,
 }: {
   indexName: string;
   totalUsd: number;
   needsRebalance: boolean;
-  priceSource: "sosovalue" | "coingecko" | null;
+  priceSource: "sosovalue" | null;
   fetchedAt: number | null;
+  walletAddress: `0x${string}` | undefined;
+  isWalletConnected: boolean;
   onRefresh: () => void;
 }) {
   return (
@@ -208,8 +261,14 @@ function HeroBand({
         <h1 className="text-4xl sm:text-5xl font-normal mt-1 text-numeric">
           {formatUsd(totalUsd, 2)}
         </h1>
-        <div className="mt-2 flex items-center gap-3">
+        <div className="mt-2 flex flex-wrap items-center gap-3">
           <PriceSourceTag source={priceSource} fetchedAt={fetchedAt} />
+          {isWalletConnected && walletAddress && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] px-2 h-5 rounded-[4px] bg-[color:var(--color-surface-2)] text-[color:var(--color-fg-muted)] font-mono border border-[color:var(--color-border-strong)]">
+              <Wallet className="h-3 w-3" />
+              {truncateAddress(walletAddress)}
+            </span>
+          )}
           {needsRebalance && (
             <span className="text-[11px] px-2 h-5 inline-flex items-center rounded-[4px] bg-[color:var(--color-danger-dim)] text-[color:var(--color-danger)] uppercase tracking-wide">
               Rebalance recommended
@@ -227,24 +286,77 @@ function HeroBand({
   );
 }
 
-function DevFooter({
-  onResetHoldings,
+function ConnectWalletPrompt() {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-[12px] bg-[color:var(--color-surface)] border border-[color:var(--color-accent)]/40">
+      <div className="flex items-start gap-3">
+        <Wallet className="h-5 w-5 text-[color:var(--color-accent)] mt-0.5 shrink-0" />
+        <div>
+          <p className="text-sm font-medium text-[color:var(--color-fg)]">
+            Connect your wallet to read live balances
+          </p>
+          <p className="text-xs text-[color:var(--color-fg-muted)] mt-1">
+            Balances are read directly from Ethereum mainnet — WBTC, WETH (native ETH), Wormhole-wrapped SOL and AVAX, BNB ERC-20, USDC. No simulation.
+          </p>
+        </div>
+      </div>
+      <WalletButton />
+    </div>
+  );
+}
+
+function EmptyWalletBanner() {
+  return (
+    <div className="flex items-start gap-3 p-4 rounded-[10px] bg-[color:var(--color-warn-dim)] border border-[color:var(--color-warn)]/30">
+      <Inbox className="h-4 w-4 text-[color:var(--color-warn)] mt-0.5 shrink-0" />
+      <div className="space-y-0.5">
+        <p className="text-sm text-[color:var(--color-fg)]">
+          No holdings detected on Ethereum mainnet
+        </p>
+        <p className="text-xs text-[color:var(--color-fg-muted)]">
+          Deposit one of the index tokens to your connected wallet to populate the dashboard. Charts and the briefing will appear automatically.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ChartEmpty({ label }: { label: string }) {
+  return (
+    <div className="grid grid-cols-2 gap-4 h-[240px]">
+      <div className="rounded-full border border-dashed border-[color:var(--color-border)] flex items-center justify-center" />
+      <div className="rounded-full border border-dashed border-[color:var(--color-border)] flex items-center justify-center px-4 text-center text-xs text-[color:var(--color-fg-subtle)]">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function TableEmpty({ label }: { label: string }) {
+  return (
+    <div className="px-6 py-12 text-center text-sm text-[color:var(--color-fg-subtle)]">
+      {label}
+    </div>
+  );
+}
+
+function DataFooter({
   pricesCount,
+  isWalletConnected,
+  walletAddress,
 }: {
-  onResetHoldings: () => void;
   pricesCount: number;
+  isWalletConnected: boolean;
+  walletAddress: `0x${string}` | undefined;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 pt-6 border-t border-[color:var(--color-border)] text-[11px] text-[color:var(--color-fg-subtle)]">
+    <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-[color:var(--color-border)] text-[11px] text-[color:var(--color-fg-subtle)] font-mono">
       <span>
-        Holdings simulated locally · {pricesCount} price source{pricesCount === 1 ? "" : "s"} active
+        Balances: {isWalletConnected && walletAddress ? `mainnet · ${truncateAddress(walletAddress)}` : "wallet not connected"}
       </span>
-      <button
-        onClick={onResetHoldings}
-        className="text-[color:var(--color-fg-subtle)] hover:text-[color:var(--color-danger)] transition-colors"
-      >
-        Reset holdings
-      </button>
+      <span>
+        {pricesCount} price source{pricesCount === 1 ? "" : "s"} active
+      </span>
     </div>
   );
 }

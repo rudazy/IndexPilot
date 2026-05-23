@@ -11,8 +11,7 @@ export default function DriftDetection() {
       <h2>How IndexPilot measures drift</h2>
 
       <p>
-        Every five minutes the dashboard pulls fresh prices from SoSoValue —
-        or CoinGecko as a transparent fallback while an API key is pending.
+        Every five minutes the dashboard pulls fresh prices from SoSoValue.
         For each asset we compute:
       </p>
 

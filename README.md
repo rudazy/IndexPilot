@@ -1,23 +1,119 @@
 # IndexPilot
 
-Your personal on-chain index fund. Set weights, watch for drift, and get a precise rebalance plan with plain-English explanations.
+A personal on-chain index fund with drift detection and AI-explained rebalancing.
+
+## The problem
+
+Manual portfolio rebalancing is tedious and error-prone. You set target weights, prices move, weights drift, and either you forget to rebalance or you rebalance reactively without a clear thesis. Most retail tooling either hides the math behind a black box or dumps raw numbers without context.
+
+IndexPilot keeps the math transparent and the explanation specific. Every rebalance plan is a deterministic function of live prices, target weights, and a drift threshold — no hidden logic. Every plan is paired with a written briefing that cites the exact drift figures and 24-hour price moves that justify each trade.
+
+## What it does
+
+- Build a custom crypto index from a curated token list with live 100% allocation validation.
+- Pull live market data from the SoSoValue API on a 5-minute cadence.
+- Compute current weight, target weight, drift percentage, and status (on-target / mild / rebalance) per asset.
+- Generate a deterministic rebalance plan: ordered buy/sell list with token amount, USD amount, and execution price.
+- Write a structured AI briefing (headline, drift summary, trade rationale, risk note, confidence) for the current plan.
+- Surface every upstream API call in the dashboard so users can verify the data path end to end.
+
+## Architecture
+
+```
+┌───────────────┐    ┌──────────────────────┐    ┌─────────────────────┐
+│ /setup        │    │ /dashboard            │    │ Settings (local)    │
+│ Index builder │───▶│ Portfolio · Plan · AI │◀──▶│ IndexConfig in      │
+│ (allocations) │    │ Briefing · API log    │    │ localStorage        │
+└───────────────┘    └──────────┬───────────┘    └─────────────────────┘
+                                │
+                  ┌─────────────┼──────────────┐
+                  ▼             ▼              ▼
+        ┌────────────────┐ ┌──────────┐ ┌──────────────┐
+        │ /api/prices    │ │ lib/      │ │ /api/briefing│
+        │ proxy +        │ │ rebalance │ │ Claude       │
+        │ snapshot map   │ │ (pure)    │ │ (Sonnet 4.6) │
+        └────────┬───────┘ └─────┬─────┘ └──────┬───────┘
+                 │               │              │
+                 ▼               ▼              ▼
+        ┌────────────────┐ ┌──────────┐ ┌──────────────┐
+        │ SoSoValue      │ │ Portfolio │ │ Structured   │
+        │ /market-       │ │ + Plan    │ │ briefing     │
+        │  snapshot      │ │ objects   │ │ JSON         │
+        └────────────────┘ └──────────┘ └──────────────┘
+```
+
+**Data flow per dashboard render:**
+
+1. `usePrices(symbols)` calls `/api/prices?symbols=...`. The server route signs each per-symbol request with `x-soso-api-key` against `openapi.sosovalue.com/openapi/v1/currencies/{id}/market-snapshot`, normalizes the envelope, and returns `{ prices, source, fetchedAt, meta }` with one `upstreamCalls[]` entry per token.
+2. `useWalletBalances` reads the connected wallet's ERC-20 balances from Ethereum mainnet (WBTC, WETH/native ETH, Wormhole-wrapped SOL and AVAX, BNB ERC-20, USDC) via wagmi's `useReadContracts`. `usePortfolio` joins those balances with live prices and computes per-asset drift via the pure `computePortfolio()` function in `lib/rebalance.ts`.
+3. `useRebalance(portfolio)` runs `generateRebalancePlan()` to produce the ordered buy/sell list.
+4. `useBriefing(portfolio, plan, prices, indexName)` POSTs the three objects to `/api/briefing`, which calls the Anthropic Messages API (`claude-sonnet-4-6`) with a prompt-cached system prompt and a Zod-validated structured response format, then returns `{ briefing, meta }`.
+5. The dashboard mounts the orders, the structured briefing, and the API call log side by side.
+
+## File structure
+
+```
+app/
+  api/
+    briefing/route.ts        AI briefing endpoint (Anthropic Messages API, structured Zod output)
+    prices/route.ts          SoSoValue proxy with per-call metadata
+  dashboard/page.tsx         Main app surface
+  docs/                      Public docs site (six pages)
+  setup/page.tsx             Index builder
+  layout.tsx, providers.tsx  Fonts, metadata, query client, wallet providers
+components/
+  dashboard/
+    AIBriefing.tsx           Structured briefing display (headline, drift, rationale, risk)
+    ActivityLog.tsx          Rebalance event history
+    ApiCallLog.tsx           Live SoSoValue + briefing call inspector
+    DriftBar.tsx             Inline drift visualization
+    PortfolioChart.tsx       Current vs target allocation donuts
+    PriceSourceTag.tsx       Data-source label
+    RebalancePanel.tsx       Orders list + briefing slot + execution button
+    TokenTable.tsx           Holdings table with drift status
+  setup/                     AllocationRow, TokenPicker, TriggerSelector
+  ui/                        Button, Card, Badge, Input primitives
+  Header.tsx, WalletButton.tsx, TestnetBadge.tsx
+hooks/
+  useBriefing.ts             React Query hook for /api/briefing
+  usePortfolio.ts            Config + prices + balances -> PortfolioState
+  usePrices.ts               React Query hook for /api/prices
+  useRebalance.ts            Memoized plan generator
+lib/
+  apiCallLog.ts              In-memory pub/sub ring buffer of recent API calls
+  chains.ts                  ValueChain testnet definition
+  rebalance.ts               Pure drift math + plan generator
+  sodex.ts                   Typed execution client (stub awaiting credentials)
+  sosovalue.ts               Client-side price fetcher
+  storage.ts                 Versioned typed localStorage wrapper
+  tokens.ts                  Token registry with SoSoValue currency IDs
+  types.ts                   IndexConfig, PortfolioState, RebalancePlan, ActivityEvent
+  utils.ts                   cn, formatters, truncate, uid
+  wagmi.ts                   Wagmi + RainbowKit config
+```
 
 ## Stack
 
-- Next.js 16 (app router) + React 19
-- TypeScript strict mode
-- Tailwind CSS v4
-- wagmi v2 + viem v2
-- RainbowKit 2.x for wallet connect
-- @tanstack/react-query (5-minute stale time)
-- Recharts for portfolio charts
-- SoSoValue public API for live market data (server-side), with CoinGecko as automatic fallback
+| Layer | Choice |
+| --- | --- |
+| Framework | Next.js 16 (app router) + React 19 |
+| Language | TypeScript strict |
+| Styling | Tailwind CSS v4 |
+| UI primitives | Hand-rolled (Button, Card, Badge, Input) |
+| State (server) | TanStack Query 5 (5-minute price stale time) |
+| State (client) | useState + localStorage (versioned schema) |
+| Wallet | wagmi v2 + viem v2 + RainbowKit 2 |
+| Charts | Recharts 3 |
+| Price data | SoSoValue Open API |
+| AI briefing | Anthropic Messages API (`claude-sonnet-4-6`) with Zod-validated structured outputs and prompt caching |
+| Execution | SoDEX (client slot — see Wave 2 status) |
 
-## Getting started
+## Setup
 
 ```bash
 npm install
 cp .env.example .env.local
+# fill in the SOSOVALUE_API_KEY and ANTHROPIC_API_KEY values
 npm run dev
 ```
 
@@ -27,12 +123,14 @@ Open `http://localhost:3000`.
 
 | Variable | Purpose | Required |
 | --- | --- | --- |
-| `SOSOVALUE_API_KEY` | Server-side key for live price data from SoSoValue | No — falls back to CoinGecko |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | WalletConnect v2 project ID for RainbowKit | Recommended |
-| `NEXT_PUBLIC_VALUECHAIN_TESTNET_CHAIN_ID` | ValueChain testnet chain ID | Needed for on-chain connectivity |
-| `NEXT_PUBLIC_VALUECHAIN_TESTNET_RPC_URL` | ValueChain testnet RPC endpoint | Needed for on-chain connectivity |
+| `SOSOVALUE_API_KEY` | Server-side key for SoSoValue market data. Read in `/api/prices` only. | Yes |
+| `ANTHROPIC_API_KEY` | Server-side key for the Anthropic Messages API. Read in `/api/briefing` only. | Yes |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | WalletConnect v2 project ID for RainbowKit. | Recommended |
+| `NEXT_PUBLIC_VALUECHAIN_TESTNET_CHAIN_ID` | ValueChain testnet chain ID. | For on-chain features |
+| `NEXT_PUBLIC_VALUECHAIN_TESTNET_RPC_URL` | ValueChain testnet RPC endpoint. | For on-chain features |
+| `SODEX_API_KEY` | SoDEX trading API key. | Pending — required once Wave 2 SoDEX client ships |
 
-The SoSoValue key is read server-side only; it is never shipped to the browser.
+All API keys are read server-side. Nothing prefixed with `NEXT_PUBLIC_` carries a secret.
 
 ## Scripts
 
@@ -44,68 +142,33 @@ npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 ```
 
-## Architecture
+## Wave status
 
-```
-app/
-  api/prices/route.ts   server-side price proxy (SoSoValue → CoinGecko fallback)
-  setup/page.tsx        index builder
-  dashboard/page.tsx    portfolio view + rebalance plan
-  page.tsx              landing
-  layout.tsx            providers + fonts + metadata
-  providers.tsx         wagmi + react-query + rainbowkit
-components/
-  ui/                   Button, Card, Badge, Input primitives
-  setup/                AllocationRow, TokenPicker, TriggerSelector
-  dashboard/            PortfolioChart, TokenTable, DriftBar, RebalancePanel, ActivityLog
-  Header.tsx            top nav + wallet button
-  WalletButton.tsx      RainbowKit custom connect button
-hooks/
-  usePrices.ts          react-query price fetcher
-  usePortfolio.ts       config + prices + simulated balances → PortfolioState
-  useRebalance.ts       memoized rebalance plan generator
-lib/
-  types.ts              IndexConfig, PortfolioState, RebalancePlan, ActivityEvent
-  rebalance.ts          drift math + plan generator + plain-English explainer
-  storage.ts            versioned, typed localStorage wrapper
-  tokens.ts             token registry with multi-source ids
-  sosovalue.ts          client fetcher calling /api/prices
-  sodex.ts              typed empty slot for SoDEX execution
-  chains.ts             ValueChain testnet definition
-  wagmi.ts              wagmi config with RainbowKit defaults
-  utils.ts              cn, formatters, truncate, uid
-```
+| Capability | Wave 1 | Wave 2 |
+| --- | --- | --- |
+| Index builder UI | shipped | shipped |
+| Live prices (SoSoValue) | shipped | shipped + per-call metadata exposed |
+| Drift math and plan generator | shipped | shipped |
+| Rebalance plan UI | shipped | shipped |
+| Activity log | shipped | shipped |
+| Plan explanation | templated string | AI briefing (Anthropic, structured output) |
+| Dashboard API inspector | not present | shipped |
+| Documentation site | shipped | shipped |
+| SoDEX execution | typed empty slot, deeplink button | pending — credentials in flight |
+| On-chain balance reads | simulated from $10k seed | **shipped** — real Ethereum mainnet ERC-20 reads via wagmi |
 
-### Price flow
+### Wave 2 verification
 
-1. Hook `usePrices(symbols)` calls `/api/prices?symbols=BTC,ETH,SOL`.
-2. The API route picks the best source:
-   - If `SOSOVALUE_API_KEY` is set, it proxies to SoSoValue's `/currencies/{id}/market-snapshot`.
-   - Otherwise or on failure, it falls back to CoinGecko's `/simple/price`.
-3. Response is normalized to `PriceSnapshot[]` with source tagging.
-4. React Query caches results for 5 minutes; hooks refresh automatically.
-
-### Rebalance logic
-
-- `computePortfolio(config, balances, prices)` returns a `PortfolioState` with current weights, drift per asset, and a per-asset `DriftStatus` (on-target / mild / rebalance).
-- `generateRebalancePlan(portfolio)` produces an ordered list of buy/sell orders that restore target weights plus a plain-English explanation.
-- All logic is pure and framework-free, living in `lib/rebalance.ts`.
-
-### Simulated holdings
-
-Wave 1 does not yet read cross-chain wallet balances. On first dashboard visit we generate simulated balances from the index config + a $10k starting value, save them to localStorage, and recompute weights against live prices. As prices move, drift appears naturally. "Reset holdings" in the dashboard footer restarts the simulation.
-
-### SoDEX execution
-
-`lib/sodex.ts` holds typed client interfaces for quoting and executing rebalance orders through SoDEX. The factory throws until API access lands. The dashboard "Execute on SoDEX" button links to the SoDEX app for now; once the API key is issued, the factory gets an implementation and the button will deeplink with the rebalance plan attached.
+Every dashboard render exposes the upstream API calls it made. The bottom of the dashboard shows a live log of SoSoValue and Anthropic requests with timestamp, endpoint, status, latency, and token usage. Server logs mirror the same data with `[prices]` and `[briefing]` prefixes for inspection in Vercel logs or local stdout.
 
 ## Security posture
 
-- No secrets in frontend code or `.env.example`.
-- `.npmrc` enforces a 7-day minimum release age on every install.
+- No secrets in client code, `.env.example`, or git history.
+- `.npmrc` enforces a 7-day minimum release age on every install (`min-release-age=7`).
 - Pinned dependency versions (`save-exact=true`).
-- Price-source API key never leaves the server.
-- All external input (URL params, JSON responses) is validated before use.
+- `SOSOVALUE_API_KEY` and `ANTHROPIC_API_KEY` are read server-side only and never appear in network responses.
+- All API route inputs are schema-validated (Zod) before reaching upstream services.
+- Anthropic SDK calls use typed exception classes (`AuthenticationError`, `RateLimitError`, `APIError`) instead of string matching on error messages.
 
 ## License
 

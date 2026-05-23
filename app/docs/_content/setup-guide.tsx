@@ -74,9 +74,9 @@ export default function SetupGuide() {
       <p>
         When the composition is valid and a trigger is selected,{" "}
         <strong>Launch dashboard</strong> becomes active. Pressing it saves
-        your index configuration to local storage, seeds a simulated set of
-        holdings at the target weights using a $10,000 notional value, and
-        routes you to the live dashboard.
+        your index configuration to local storage and routes you to the live
+        dashboard. The dashboard reads your wallet&apos;s real ERC-20 balances
+        from Ethereum mainnet — connect a wallet to populate it.
       </p>
 
       <p>

@@ -44,7 +44,7 @@ export interface PriceSnapshot {
   priceUsd: number;
   change24hPct: number;
   fetchedAt: number;
-  source: "sosovalue" | "coingecko" | "mock";
+  source: "sosovalue" | "mock";
 }
 
 export interface Holding {
@@ -94,16 +94,8 @@ export interface ActivityEvent {
   plan?: RebalancePlan;
 }
 
-export interface SimulatedHoldings {
-  schemaVersion: 1;
-  startingValueUsd: number;
-  createdAt: number;
-  balances: Record<string, number>;
-}
-
 export interface StoredAppState {
   schemaVersion: 1;
   config: IndexConfig | null;
   activity: ActivityEvent[];
-  holdings: SimulatedHoldings | null;
 }

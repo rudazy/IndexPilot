@@ -1,26 +1,36 @@
 import { NextResponse } from "next/server";
-import { findTokenBySymbol, findTokenByCoingeckoId } from "@/lib/tokens";
+import { findTokenBySymbol } from "@/lib/tokens";
 import type { PriceSnapshot } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const revalidate = 60;
 
 const SOSOVALUE_BASE = "https://openapi.sosovalue.com/openapi/v1";
-const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 
-interface SosovalueSnapshot {
-  currency_id?: string;
-  symbol?: string;
-  price?: number;
-  price_usd?: number;
-  change_24h?: number;
-  change_24h_pct?: number;
-  price_change_percentage_24h?: number;
+interface SosovalueMarketSnapshot {
+  price?: number | string;
+  change_pct_24h?: number | string;
 }
 
-interface CoingeckoSimplePriceEntry {
-  usd: number;
-  usd_24h_change?: number;
+interface SosovalueEnvelope<T> {
+  code?: number;
+  message?: string;
+  data?: T;
+}
+
+export interface UpstreamCallMeta {
+  symbol: string;
+  currencyId: string;
+  url: string;
+  status: number;
+  latencyMs: number;
+  ok: boolean;
+  error?: string;
+}
+
+interface SnapshotResult {
+  snapshot: PriceSnapshot | null;
+  meta: UpstreamCallMeta;
 }
 
 function normalizeSymbols(raw: string | null): string[] {
@@ -35,74 +45,72 @@ function normalizeSymbols(raw: string | null): string[] {
   );
 }
 
-async function fromSosovalue(
-  symbols: string[],
-  apiKey: string,
-): Promise<PriceSnapshot[]> {
-  const fetchedAt = Date.now();
-  const snapshots = await Promise.all(
-    symbols.map(async (symbol): Promise<PriceSnapshot | null> => {
-      const token = findTokenBySymbol(symbol);
-      if (!token?.sosovalueCurrencyId) return null;
-
-      const url = `${SOSOVALUE_BASE}/currencies/${token.sosovalueCurrencyId}/market-snapshot`;
-      const res = await fetch(url, {
-        headers: { "x-soso-api-key": apiKey },
-        cache: "no-store",
-      });
-      if (!res.ok) return null;
-
-      const json = (await res.json()) as SosovalueSnapshot;
-      const priceUsd = json.price_usd ?? json.price;
-      if (typeof priceUsd !== "number") return null;
-
-      const change =
-        json.change_24h_pct ??
-        json.price_change_percentage_24h ??
-        json.change_24h ??
-        0;
-
-      return {
-        symbol,
-        priceUsd,
-        change24hPct: change,
-        fetchedAt,
-        source: "sosovalue",
-      };
-    }),
-  );
-
-  return snapshots.filter((s): s is PriceSnapshot => s !== null);
+function toNumber(value: number | string | undefined): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
-async function fromCoingecko(symbols: string[]): Promise<PriceSnapshot[]> {
-  const ids = symbols
-    .map((s) => findTokenBySymbol(s)?.coingeckoId)
-    .filter((id): id is string => Boolean(id));
-  if (ids.length === 0) return [];
+async function fetchSnapshot(
+  symbol: string,
+  currencyId: string,
+  apiKey: string,
+  fetchedAt: number,
+): Promise<SnapshotResult> {
+  const url = `${SOSOVALUE_BASE}/currencies/${encodeURIComponent(currencyId)}/market-snapshot`;
+  const startedAt = Date.now();
+  let status = 0;
+  let error: string | undefined;
+  let snapshot: PriceSnapshot | null = null;
 
-  const url = `${COINGECKO_BASE}/simple/price?ids=${ids.join(",")}&vs_currencies=usd&include_24hr_change=true`;
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error(`CoinGecko responded ${res.status}`);
+  try {
+    const res = await fetch(url, {
+      headers: { "x-soso-api-key": apiKey },
+      cache: "no-store",
+    });
+    status = res.status;
+
+    if (!res.ok) {
+      error = `HTTP ${res.status}`;
+    } else {
+      const envelope = (await res.json()) as SosovalueEnvelope<SosovalueMarketSnapshot>;
+      if (envelope.code !== 0 || !envelope.data) {
+        error = `envelope code ${envelope.code ?? "missing"}`;
+      } else {
+        const priceUsd = toNumber(envelope.data.price);
+        if (priceUsd === null) {
+          error = "missing price field";
+        } else {
+          const changeFraction = toNumber(envelope.data.change_pct_24h) ?? 0;
+          snapshot = {
+            symbol,
+            priceUsd,
+            change24hPct: changeFraction * 100,
+            fetchedAt,
+            source: "sosovalue",
+          };
+        }
+      }
+    }
+  } catch (e) {
+    error = e instanceof Error ? e.message : "network error";
   }
 
-  const data = (await res.json()) as Record<string, CoingeckoSimplePriceEntry>;
-  const fetchedAt = Date.now();
+  const latencyMs = Date.now() - startedAt;
+  const meta: UpstreamCallMeta = {
+    symbol,
+    currencyId,
+    url,
+    status,
+    latencyMs,
+    ok: snapshot !== null,
+    ...(error ? { error } : {}),
+  };
 
-  return Object.entries(data)
-    .map(([coingeckoId, entry]): PriceSnapshot | null => {
-      const token = findTokenByCoingeckoId(coingeckoId);
-      if (!token) return null;
-      return {
-        symbol: token.symbol,
-        priceUsd: entry.usd,
-        change24hPct: entry.usd_24h_change ?? 0,
-        fetchedAt,
-        source: "coingecko",
-      };
-    })
-    .filter((s): s is PriceSnapshot => s !== null);
+  return { snapshot, meta };
 }
 
 export async function GET(request: Request) {
@@ -117,30 +125,72 @@ export async function GET(request: Request) {
   }
 
   const apiKey = process.env.SOSOVALUE_API_KEY;
-  const fetchedAt = Date.now();
-
-  if (apiKey) {
-    try {
-      const prices = await fromSosovalue(symbols, apiKey);
-      if (prices.length === symbols.length) {
-        return NextResponse.json(
-          { prices, source: "sosovalue", fetchedAt },
-          {
-            headers: {
-              "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
-            },
-          },
-        );
-      }
-    } catch {
-      // fall through to CoinGecko
-    }
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "SOSOVALUE_API_KEY is not configured." },
+      { status: 503 },
+    );
   }
 
-  try {
-    const prices = await fromCoingecko(symbols);
+  const fetchedAt = Date.now();
+  const requested = symbols.map((symbol) => ({
+    symbol,
+    currencyId: findTokenBySymbol(symbol)?.sosovalueCurrencyId,
+  }));
+
+  const unsupported = requested
+    .filter((r) => !r.currencyId)
+    .map((r) => r.symbol);
+  if (unsupported.length > 0) {
     return NextResponse.json(
-      { prices, source: "coingecko", fetchedAt },
+      { error: `Unsupported symbols: ${unsupported.join(", ")}` },
+      { status: 400 },
+    );
+  }
+
+  const startedAt = Date.now();
+
+  try {
+    const results = await Promise.all(
+      requested.map((r) =>
+        fetchSnapshot(r.symbol, r.currencyId as string, apiKey, fetchedAt),
+      ),
+    );
+
+    const prices = results
+      .map((r) => r.snapshot)
+      .filter((s): s is PriceSnapshot => s !== null);
+    const upstreamCalls = results.map((r) => r.meta);
+    const totalLatencyMs = Date.now() - startedAt;
+    const missing = symbols.filter((s) => !prices.find((p) => p.symbol === s));
+
+    console.log(
+      `[prices] symbols=${symbols.join(",")} ` +
+        `upstream=${upstreamCalls.length} ` +
+        `ok=${upstreamCalls.filter((c) => c.ok).length} ` +
+        `total_latency=${totalLatencyMs}ms ` +
+        `avg_upstream_latency=${Math.round(
+          upstreamCalls.reduce((s, c) => s + c.latencyMs, 0) / upstreamCalls.length,
+        )}ms`,
+    );
+
+    if (missing.length > 0) {
+      return NextResponse.json(
+        {
+          error: `SoSoValue returned no data for: ${missing.join(", ")}`,
+          meta: { upstreamCalls, totalLatencyMs },
+        },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        prices,
+        source: "sosovalue",
+        fetchedAt,
+        meta: { upstreamCalls, totalLatencyMs },
+      },
       {
         headers: {
           "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",

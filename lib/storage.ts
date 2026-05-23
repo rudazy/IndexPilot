@@ -1,9 +1,4 @@
-import type {
-  ActivityEvent,
-  IndexConfig,
-  SimulatedHoldings,
-  StoredAppState,
-} from "./types";
+import type { ActivityEvent, IndexConfig, StoredAppState } from "./types";
 
 const STORAGE_KEY = "indexpilot.state.v1";
 const CURRENT_SCHEMA = 1 as const;
@@ -13,7 +8,6 @@ const emptyState: StoredAppState = {
   schemaVersion: CURRENT_SCHEMA,
   config: null,
   activity: [],
-  holdings: null,
 };
 
 function isBrowser(): boolean {
@@ -21,7 +15,7 @@ function isBrowser(): boolean {
 }
 
 function freshState(): StoredAppState {
-  return { ...emptyState, activity: [], holdings: null };
+  return { ...emptyState, activity: [] };
 }
 
 function readRaw(): StoredAppState {
@@ -34,7 +28,11 @@ function readRaw(): StoredAppState {
     const parsed = JSON.parse(raw) as unknown;
     if (!isStoredState(parsed)) return freshState();
     if (parsed.schemaVersion !== CURRENT_SCHEMA) return freshState();
-    return parsed;
+    return {
+      schemaVersion: parsed.schemaVersion,
+      config: parsed.config,
+      activity: parsed.activity,
+    };
   } catch {
     return freshState();
   }
@@ -88,20 +86,6 @@ export function clearActivity(): void {
 export function resetAll(): void {
   if (!isBrowser()) return;
   window.localStorage.removeItem(STORAGE_KEY);
-}
-
-export function loadHoldings(): SimulatedHoldings | null {
-  return readRaw().holdings;
-}
-
-export function saveHoldings(holdings: SimulatedHoldings): void {
-  const state = readRaw();
-  writeRaw({ ...state, holdings });
-}
-
-export function clearHoldings(): void {
-  const state = readRaw();
-  writeRaw({ ...state, holdings: null });
 }
 
 export function exportState(): StoredAppState {

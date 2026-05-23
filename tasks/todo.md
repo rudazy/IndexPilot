@@ -18,7 +18,20 @@ Next.js 14 app router, TS strict, Tailwind + shadcn/ui, wagmi v2 + viem v2, reac
 
 ## Current task
 
-Docs section added (2026-04-22). `/docs` + `/docs/[slug]` with sidebar nav, six pages written (Getting Started, Drift Detection, Setup Guide, Rebalance Plan, Executing on SoDEX, FAQ). Build passes, typecheck + lint clean. Awaiting manual UI pass.
+SoSoValue API key wired in as the sole price source (2026-05-06). CoinGecko fallback fully removed. Live smoke test against `/currencies/{id}/market-snapshot` returns BTC/ETH/SOL/BNB/AVAX/USDC with realistic prices and 24h percent changes. Typecheck + lint clean.
+
+## Completed 2026-05-06 — SoSoValue primary
+
+- `app/api/prices/route.ts` — rewritten to call SoSoValue only. Unwraps the `{code, message, data}` envelope, multiplies `change_pct_24h` (fraction) into a percent, returns 503 if `SOSOVALUE_API_KEY` missing, 400 for unsupported symbols, 502 if SoSoValue returns no data. Header `x-soso-api-key` per official docs (sosovalue.gitbook.io/soso-value-api-doc).
+- `lib/tokens.ts` — replaced CoinGecko slugs with real SoSoValue numeric `currency_id` values (BTC `…866`, ETH `…867`, BNB `…869`, USDC `…870`, SOL `…875`, AVAX `…883`) discovered by hitting `/currencies`. Removed `coingeckoId`, `findTokenByCoingeckoId`, `byCoingecko` map.
+- `lib/sosovalue.ts`, `lib/types.ts`, `hooks/usePrices.ts`, `hooks/usePortfolio.ts`, `app/dashboard/page.tsx` — narrowed `source` / `priceSource` unions from `"sosovalue" | "coingecko"` to `"sosovalue"`.
+- `components/dashboard/PriceSourceTag.tsx` — hardcoded "SoSoValue" label, dropped LABEL map.
+- `README.md`, `app/docs/_content/drift-detection.tsx`, `app/docs/_content/faq.tsx` — removed every CoinGecko mention; FAQ now states `SOSOVALUE_API_KEY` is required.
+- Verified: typecheck (0 errors), lint (0 warnings), live `/api/prices?symbols=BTC,ETH,SOL,BNB,AVAX,USDC` → 200, all six tokens populated.
+
+## Earlier — docs section (2026-04-22)
+
+`/docs` + `/docs/[slug]` with sidebar nav, six pages written (Getting Started, Drift Detection, Setup Guide, Rebalance Plan, Executing on SoDEX, FAQ). Build passes.
 
 ## Completed this session
 
@@ -68,13 +81,140 @@ Docs section added (2026-04-22). `/docs` + `/docs/[slug]` with sidebar nav, six 
 
 Written at `/README.md`. No AI or program attribution. Documents stack, env vars, scripts, architecture, price flow, rebalance logic, simulated-holdings rationale, and security posture.
 
-## Next session / Wave 2 prep
+## Wave 2 — 2026-05-22 (in progress)
+
+Started: 2026-05-22. Wave 1 scored 306/500 (Functionality 57, Data/API 57 lowest). Edgework competitor scored 351 on README + Claude integration + clean modules. SoSoValue API is live; Ludarep now has SoDEX API docs.
+
+### Wave 2 priorities (Ludarep decided in order)
+1. **Real SoDEX execution** — `lib/sodex.ts` stub → real client with quote/execute/tx receipt. **Waiting on Ludarep to paste API docs.**
+2. **AI Briefing panel** — Claude API integration replacing the templated `plan.explanation`. **DONE this session.**
+3. **README rewrite** — sharp problem statement, architecture diagram, file tree, Wave 2 checklist.
+4. **API visibility** — structured logging on `/api/prices` + dashboard tray showing live SoSoValue calls.
+
+### Completed this session 2026-05-22 — AI Briefing panel
+
+**New files**
+- `app/api/briefing/route.ts` — POST endpoint. Uses `claude-sonnet-4-6` (cost/latency choice over Opus 4.7), Zod-validated request body, structured Zod output via `output_config.format` + `zodOutputFormat()`, prompt-cached system prompt (~2.5K tokens, hits Sonnet 4.6's 2048-token caching minimum). Returns `{briefing: {headline, drift_summary, trade_rationale, risk_note, confidence}, meta: {model, latencyMs, usage}}`. Typed Anthropic exceptions (`AuthenticationError`, `RateLimitError`, `APIError`). Console-logs every call with token usage + cache hit metrics for judge inspection.
+- `hooks/useBriefing.ts` — React Query hook keyed on `[indexName, planFingerprint]` (rounded-USD order signature), 5-min staleTime, no auto-retry, no window-focus refetch. Auto-fires when portfolio + plan + prices ready and `totalValueUsd > 0`. Re-fires only when plan orders materially change.
+- `components/dashboard/AIBriefing.tsx` — structured display with distinct sections (headline + accent block, drift summary, trade rationale, risk note as warn-tone). Confidence badge (high=success / medium=warn / low=neutral). Skeleton during load. Error fallback renders the deterministic `plan.explanation` so the UI never goes blank. Subtle footer shows `model · latencyMs · in/out tokens · cache hit` in mono font + manual refresh button.
+
+**Modified files**
+- `components/dashboard/RebalancePanel.tsx` — removed hand-rolled explanation block (was lines 18-23). Now renders `<AIBriefing>` at the top, then orders list, then footer buttons. Accepts briefing props from parent.
+- `app/dashboard/page.tsx` — wired `useBriefing(portfolio, plan, prices, config?.name)`, passes results to RebalancePanel. Updated card subtitle "AI-generated orders" → "Deterministic orders · AI briefing" (was misleading; orders are pure math, briefing is the AI).
+- `.env.example` — added `ANTHROPIC_API_KEY=`.
+- `package.json` — added `@anthropic-ai/sdk@0.98.0`, `zod@4.4.3` (both `--save-exact` per `.npmrc`).
+
+**Verification**
+- `npx tsc --noEmit` → 0 errors
+- `npx eslint . --ext .ts,.tsx` → clean
+- `npm run build` → 13 pages, `/api/briefing` registered as dynamic route, no warnings
+
+**Pending for Ludarep before this is fully testable**
+- Set `ANTHROPIC_API_KEY=sk-ant-...` in `.env.local` (currently absent). Without it, the endpoint returns 503 with a clear error message and the UI falls back to the deterministic explanation.
+
+### Completed this session 2026-05-22 (cont.) — README + API visibility
+
+**README rewrite** — `README.md` fully replaced. New structure: sharp problem statement up top, "What it does" bullets, ASCII architecture diagram showing /setup → /dashboard → API routes → upstream services, per-step data flow narrative, file tree, stack table, setup, env vars table (including `ANTHROPIC_API_KEY` and `SODEX_API_KEY`), **Wave 1 vs Wave 2 status table**, Wave 2 verification note pointing at the new API inspector + server logs, security posture, license. No emojis, no buildathon/AI-tool attribution per `feedback_no_attribution`.
+
+**Server-side API call metadata**
+- `app/api/prices/route.ts` — refactored `fetchSnapshot` to track per-call status + latency + error string. Returns `meta: { upstreamCalls: [...], totalLatencyMs }` alongside `prices`. Each `UpstreamCallMeta` entry has `{ symbol, currencyId, url, status, latencyMs, ok, error? }`. Added structured `[prices]` stdout log with symbols/upstream count/ok count/total + avg latency.
+- `app/api/briefing/route.ts` — added `upstreamCalls: [{ url, status, latencyMs, ok }]` to meta (single Anthropic call), preserving the existing `[briefing]` stdout log.
+- `lib/sosovalue.ts` — `PriceApiResponse` now types `meta` field; added exported `UpstreamCallMeta` interface.
+
+**Client-side API call log + dashboard tray**
+- `lib/apiCallLog.ts` — module-level pub/sub ring buffer (30 entries). Exports `addApiCall`, `clearApiCalls`, `getApiCalls`, `subscribeApiCalls`. Each entry has `{ id, source, timestamp, endpoint, upstreamUrl, status, ok, latencyMs, summary, detail?, tokens? }`.
+- `hooks/usePrices.ts` — added `useEffect` keyed on `query.dataUpdatedAt` to push one entry per upstream call + one aggregate batch entry on every successful fetch. Separate effect logs errors. Uses `useRef` to dedupe on `dataUpdatedAt`.
+- `hooks/useBriefing.ts` — same pattern: pushes one entry on each successful briefing with token usage attached, plus an error effect. Updated `BriefingMeta` type to include `upstreamCalls`.
+- `components/dashboard/ApiCallLog.tsx` — collapsible tray (expanded by default for judging visibility). Uses `useSyncExternalStore` to subscribe. Each row: status dot, color-coded source badge (`soso` accent / `claude` warn), HH:MM:SS timestamp (mono), summary, latency, HTTP status. Click row to expand → shows full upstream URL, optional detail (error), token usage for briefing calls. Clear button in header.
+- `app/dashboard/page.tsx` — mounted `<ApiCallLog />` between the main grid and the dev footer.
+
+**Verification**
+- `npx tsc --noEmit` → 0 errors
+- `npx eslint . --ext .ts,.tsx` → 0 warnings (fixed one unused-var in prices route)
+- `npm run build` → 13 pages, both API routes registered as dynamic
+
+### Completed 2026-05-23 — Real on-chain balance reads
+
+Replaced simulated holdings with live wallet reads against Ethereum mainnet. Decision (Ludarep, in review session): use Ethereum mainnet wrapped-asset ERC-20s for the full index catalog; empty wallet shows zero portfolio + deposit prompt (no fallback to simulated).
+
+**New/updated files**
+- `lib/tokens.ts` — added `address` and `bridge` fields to every catalog entry. BTC -> WBTC, ETH -> native (via `isNative: true`), SOL -> Wormhole, BNB -> Binance ERC-20, AVAX -> Wormhole, USDC -> canonical. Comments document the source registries (etherscan, wormhole portal). Wormhole-wrapped SOL/AVAX addresses should be verified before each production deploy.
+- `hooks/useWalletBalances.ts` — new. Uses wagmi `useAccount` + `useBalance` (native ETH) + `useReadContracts` (ERC-20 `balanceOf` via viem's `erc20Abi`). Pinned to `mainnet.id` regardless of wallet's current network so users don't need to switch. Returns human-readable balances via `formatUnits`, plus raw bigint for downstream signing precision later.
+- `hooks/usePortfolio.ts` — fully rewritten. Removed simulated balance generation, `SimulatedHoldings` dependency, `resetHoldings`, and the `holdings` localStorage state. Joins live prices with wallet balances. Returns new fields: `walletAddress`, `isWalletConnected`, `hasHoldings`.
+- `app/dashboard/page.tsx` — added three states:
+  1. **Not connected**: `ConnectWalletPrompt` banner with embedded `<WalletButton />`. Charts/table show empty placeholders with "Connect a wallet" copy.
+  2. **Connected but empty**: `EmptyWalletBanner` warning + "Deposit one of the index tokens" copy in the rebalance panel slot. AI briefing is suppressed (won't fire) so we don't waste tokens on a zero portfolio.
+  3. **Connected with holdings**: normal flow as before.
+  Hero band now shows the connected wallet address (truncated, mono font, in a chip). Removed `DevFooter`/"Reset holdings" button — balances are real, nothing to reset. Replaced with `DataFooter` showing wallet connection state.
+- `lib/storage.ts` — removed `loadHoldings`/`saveHoldings`/`clearHoldings` and the `holdings` field from `StoredAppState`. Schema version stays at 1 (existing localStorage configs still parse; extra `holdings` field is ignored on read and stripped on next write).
+- `lib/types.ts` — removed `SimulatedHoldings` interface and `holdings` field from `StoredAppState`.
+- `app/setup/page.tsx` — removed `clearHoldings()` call after `saveConfig` (no longer needed).
+- `app/docs/_content/setup-guide.tsx` — updated paragraph to describe real wallet read flow instead of $10k simulated seed.
+- `README.md` — updated price-flow narrative (step 2) and Wave 2 status table row for on-chain balance reads.
+
+**Verification**
+- `npx tsc --noEmit` -> 0 errors
+- `npx eslint . --ext .ts,.tsx` -> 0 warnings
+- `npm run build` -> 13 pages, both API routes registered, no warnings
+
+### Completed 2026-05-23 (cont.) — Real SoDEX spot execution client
+
+Decision (Ludarep, this session): **single-account, server-signs** model. SoDEX auth is Hyperliquid-style (API key NAME in header + private-key EIP-712 signing), which a browser wallet cannot do, so signing happens server-side with one key. Per-user browser signing was rejected as not supported by SoDEX.
+
+SECURITY: Ludarep pasted a raw private key + address in chat. Flagged as compromised; Ludarep chose "will rotate, build anyway". Code reads the key only from `process.env.SODEX_SIGNER_PRIVATE_KEY` — never hardcoded. Ludarep must rotate before any real execution. Note: the pasted address `0xA9F4…2558` currently returns `aid:0` (no SoDEX spot account) — execution will 4xx until an account is created/funded there.
+
+Research: SoDEX docs (sodex.com/documentation/api/api) + sodex-go-sdk-public. Confirmed action `batchNewOrder`, exact Go struct field order (symbolID, clOrdID, side, type, timeInForce, price?, quantity?, funds?), enums (Buy=1/Sell=2, Limit=1/Market=2, GTC=1/FOK=2/IOC=3, SignatureTypeEIP712=1), EIP-712 domain (name "spot", v "1", chainId 286623 mainnet / 138565 testnet, verifyingContract zero). Verified live: `/markets/symbols` (all of BTC/ETH/SOL/BNB/AVAX have TRADING USDC markets; quote asset USDC; `id`=symbolID; step/tick/minNotional($5)/precisions) and `/accounts/{addr}/state` (`data.aid`).
+
+**New files**
+- `lib/sodexTypes.ts` — client-safe types + constants (SodexQuote, SodexAccountInfo, SodexExecuteResponse, SODEX_APP_URL). No secrets, importable by client.
+- `lib/sodex.ts` — server-only (`import "server-only"`). Full client: env-driven config (mainnet default, `SODEX_NETWORK=testnet` switch), `getSigner()` (validates key + API-key-name regex), `fetchMarkets()` → symbol→market map, `resolveAccount()` (SODEX_ACCOUNT_ID override → else `/accounts/{addr}/state` aid; addr = SODEX_ACCOUNT_ADDRESS ?? signer), `quotePlan()` (maps orders to markets, floors qty to step / funds to quote precision, trims trailing zeros to match shopspring, gates on minNotional + USDC-is-cash + halted + dust), and the signing pipeline: compact-JSON payload → keccak256 payloadHash → viem `signTypedData(ExchangeAction)` → v normalised 27/28→0/1 → `0x01` prefix → POST `/trade/orders/batch` with X-API-Key/X-API-Sign/X-API-Nonce. Market orders: buy uses `funds` (USDC), sell uses `quantity` (base), TIF=IOC. Monotonic ms nonce.
+- `app/api/sodex/route.ts` — POST, Zod discriminated union `action: "quote" | "execute"`. SodexConfigError → 503, other → 502. `[sodex]` stdout logs.
+- `hooks/useSodex.ts` — quote + execute mutations (React Query), pushes every call to `apiCallLog` with `source: "sodex"`.
+
+**Modified files**
+- `components/dashboard/RebalancePanel.tsx` — replaced the static "Execute on SoDEX" deeplink with a multi-step flow: Preview on SoDEX (quote) → quote summary (tradable legs w/ qty/funds + fees, skipped legs w/ reasons, account readiness) → Execute N orders → result panel (per-order status/orderId). Cancel/Done reset. Import of SODEX_APP_URL moved to `lib/sodexTypes` (RebalancePanel is a client component; `lib/sodex` is server-only and must not be imported there).
+- `lib/apiCallLog.ts` — `ApiCallSource` += `"sodex"`.
+- `components/dashboard/ApiCallLog.tsx` — added green `sodex` source badge (ArrowLeftRight icon).
+- `.env.example` — added SODEX_SIGNER_PRIVATE_KEY, SODEX_API_KEY_NAME, SODEX_ACCOUNT_ID, SODEX_ACCOUNT_ADDRESS, SODEX_NETWORK with guidance comments.
+
+**Verification**
+- `npx tsc --noEmit` → 0 errors; `npx eslint . --ext .ts,.tsx` → 0 warnings; `npx next build` → 14 routes (`/api/sodex` dynamic).
+- Live runtime smoke test of `/api/sodex` quote: BTC sell → `"0.01234"`, SOL buy → `"620"`, USDC skipped (cash), AVAX $0.03 skipped (<$5), account null (no signer); execute w/o key → 503 clear message. All correct.
+
+**TWO signing details unverifiable without a funded testnet account (flagged in-code):**
+1. Decimal canonicalization must be byte-identical to the Go server's shopspring/decimal (we floor + trim trailing zeros). 
+2. Signature `v` byte (we normalise viem's 27/28 → 0/1).
+If signatures get rejected on first real submit, these two are the suspects. Validate against `SODEX_NETWORK=testnet` (chainId 138565) with a funded account before trusting mainnet fills.
+
+### Testnet validation 2026-05-23 (in progress)
+
+`SODEX_NETWORK=testnet` set in `.env.local`. All five index tokens (BTC/ETH/SOL/BNB/AVAX) have TRADING USDC markets on testnet under the same names (TESTBTC/TESTSHIB are separate extras). Account resolved: `SODEX_ACCOUNT_ADDRESS=0x60C0…5c62` → `aid 46684`, ready.
+
+- Quote ETH/USDC buy $6 → tradable, funds "6", symbolId 2. Correct.
+- First real `batchNewOrder` submit → engine `code:-1 error:"API key not found"`. Root cause: `SODEX_API_KEY_NAME=SODEX_API_KEY` is a placeholder, not a registered key name. Order BODY is correct: `{"accountID":46684,"orders":[{"symbolID":2,"clOrdID":...,"side":1,"type":2,"timeInForce":3,"funds":"6"}]}` (field order, enums, trimmed decimal, 0x01-prefixed 66-byte sig all good). Engine rejected at key lookup BEFORE signature verification, so the v-byte and decimal-canonicalization questions remain unconfirmed.
+- Route fix shipped: `executePlan` now reads `res.text()`, extracts engine error from `error`/`msg`/`message`/`errMsg`, and returns the full envelope as `raw` (previously only `data`, which was null — error reason was being swallowed). Temp debug log removed. tsc/lint clean.
+- Windows gotcha: Git Bash `kill` orphans the `next start` node tree; a stale env-less server on :3939 served the first (wrong) quote. Kill by port via `netstat -ano` + `taskkill //F //T`, or use a fresh port.
+
+### SoDEX execution VALIDATED end-to-end on mainnet 2026-05-23
+
+Testnet was abandoned (faucet/key friction); validated directly on mainnet with a small real order at Ludarep's direction. `SODEX_NETWORK=mainnet`, mainnet account `0x60C0…5c62` → `aid 205507`. The key name `SODEX_API_KEY` turned out to be Ludarep's actual registered key name (not a placeholder after all).
+
+**Real order filled:** market SELL 0.0027 ETH/USDC. Engine returned `code:0`, `orderID:2019977531`, ACCEPTED. Balance moved 0.0041→0.0014 vETH and 0→5.5932 vUSDC — exact, confirming the fill. This validates the two previously-unconfirmed signing details: (1) decimal canonicalization (trimmed string `"0.0027"`) accepted; (2) `v`-byte normalization (viem 27/28 → 0/1, `0x01` prefix) accepted. The whole quote → EIP-712 sign → submit → confirm pipeline works with real funds.
+
+**Confirmed success-response shape:** `{code:0, timestamp, data:[{code:0, clOrdID, orderID}]}`. No per-order `status` field on success; `RawOrderResult` mapping handles this (defaults status to ACCEPTED, extracts `orderID`). Works as-is; could narrow the type later but not required.
+
+**NOTE:** `.env.local` is currently on `SODEX_NETWORK=mainnet` with a live key — any execute via the dashboard now places REAL orders. Switch back to `testnet` for safe demos.
+
+### Next session / Wave 2 remaining
+
+1. SoDEX execution is done and validated. Optional polish: narrow `RawOrderResult` to the confirmed shape; surface `orderID` in the dashboard result panel (already wired via `SodexOrderResult.orderId`); consider order-status polling via `GET /accounts/{addr}/orders` for fill confirmation in the UI.
+
+### Wave 1 carry-over (still applies)
 
 1. Real on-chain balance reads once ValueChain testnet chainId + token addresses land — replace simulated balances in `hooks/usePortfolio.ts`.
-2. Implement `lib/sodex.ts` factory once SoDEX API key lands; wire dashboard "Execute on SoDEX" to deeplink with plan.
-3. Persist rebalance activity to backend or IPFS for cross-device history (currently localStorage-only).
-4. Auto-trigger based on `trigger` config (cron-like interval OR drift watcher) — currently manual only.
-5. Tests: unit tests for `lib/rebalance.ts` (drift math, edge cases), integration for `/api/prices` proxy.
+2. Persist rebalance activity to backend or IPFS for cross-device history (currently localStorage-only).
+3. Auto-trigger based on `trigger` config (cron-like interval OR drift watcher) — currently manual only.
+4. Tests: unit tests for `lib/rebalance.ts` (drift math, edge cases), integration for `/api/prices` proxy.
 
 ## Stack decisions
 

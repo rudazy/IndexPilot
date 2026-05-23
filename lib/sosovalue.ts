@@ -1,14 +1,33 @@
 import type { PriceSnapshot } from "./types";
 
+export interface UpstreamCallMeta {
+  symbol?: string;
+  currencyId?: string;
+  url: string;
+  status: number;
+  latencyMs: number;
+  ok: boolean;
+  error?: string;
+}
+
 export interface PriceApiResponse {
   prices: PriceSnapshot[];
-  source: "sosovalue" | "coingecko";
+  source: "sosovalue";
   fetchedAt: number;
+  meta: {
+    upstreamCalls: UpstreamCallMeta[];
+    totalLatencyMs: number;
+  };
 }
 
 export async function fetchPrices(symbols: string[]): Promise<PriceApiResponse> {
   if (symbols.length === 0) {
-    return { prices: [], source: "coingecko", fetchedAt: Date.now() };
+    return {
+      prices: [],
+      source: "sosovalue",
+      fetchedAt: Date.now(),
+      meta: { upstreamCalls: [], totalLatencyMs: 0 },
+    };
   }
 
   const params = new URLSearchParams({ symbols: symbols.join(",") });

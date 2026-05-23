@@ -29,19 +29,17 @@ export default function FAQ() {
       <h3>How often does IndexPilot check prices?</h3>
       <p>
         Every five minutes while the dashboard is open. Prices are pulled
-        from SoSoValue (or CoinGecko as a transparent fallback) through a
-        server-side proxy, cached for five minutes in React Query, and
-        revalidated on demand when you press <strong>Refresh</strong>.
+        from SoSoValue through a server-side proxy, cached for five minutes
+        in React Query, and revalidated on demand when you press{" "}
+        <strong>Refresh</strong>.
       </p>
 
       <h3>Is an API key required?</h3>
       <p>
-        Not for monitoring. IndexPilot ships with a CoinGecko fallback that
-        covers every supported asset, so you can build an index and watch
-        drift without registering anywhere. A SoSoValue API key is
-        recommended for production use — it ships richer, higher-frequency
-        data — and will be required once direct execution via SoDEX goes
-        live.
+        Yes. IndexPilot fetches every price through SoSoValue, so a
+        <code> SOSOVALUE_API_KEY</code> must be present in the server
+        environment for the dashboard to load live data. The key is read
+        server-side only and never shipped to the browser.
       </p>
 
       <h3>What is SoSoValue?</h3>

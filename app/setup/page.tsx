@@ -12,7 +12,7 @@ import { AllocationRow } from "@/components/setup/AllocationRow";
 import { TriggerSelector } from "@/components/setup/TriggerSelector";
 import { findTokenBySymbol, TOKEN_CATALOG, type TokenCatalogEntry } from "@/lib/tokens";
 import type { IndexAllocation, IndexConfig, RebalanceTrigger } from "@/lib/types";
-import { loadConfig, saveConfig, clearHoldings } from "@/lib/storage";
+import { loadConfig, saveConfig } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_TRIGGER: RebalanceTrigger = { kind: "drift", thresholdPct: 10 };
@@ -96,7 +96,6 @@ export default function SetupPage() {
       trigger,
     };
     saveConfig(config);
-    clearHoldings();
     router.push("/dashboard");
   };
 
