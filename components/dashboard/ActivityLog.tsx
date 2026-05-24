@@ -42,7 +42,7 @@ export function ActivityLog({ events }: ActivityLogProps) {
             >
               {KIND_LABEL[e.kind]}
             </span>
-            <span className="text-[11px] text-[color:var(--color-fg-subtle)] ml-auto text-numeric">
+            <span className="text-xs text-[color:var(--color-fg-subtle)] ml-auto text-numeric">
               {formatRelativeTime(e.timestamp)}
             </span>
           </div>

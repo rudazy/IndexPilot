@@ -205,7 +205,7 @@ function PageIntro() {
       <p className="text-xs uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
         Step 1
       </p>
-      <h1 className="text-4xl sm:text-5xl font-normal text-[color:var(--color-fg)]">
+      <h1 className="text-[32px] sm:text-5xl font-bold text-[color:var(--color-fg)]">
         Design your index.
       </h1>
       <p className="text-base text-[color:var(--color-fg-muted)] max-w-[50ch]">

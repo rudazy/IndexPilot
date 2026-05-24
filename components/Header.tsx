@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { TestnetBadge } from "./TestnetBadge";
+import { NetworkSwitcher } from "./NetworkSwitcher";
 import { WalletButton } from "./WalletButton";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +29,7 @@ export function Header({ variant = "default", className }: HeaderProps) {
             <span className="text-sm tracking-tight">IndexPilot</span>
           </Link>
           <span className="hidden sm:inline-block h-4 w-px bg-[color:var(--color-border-strong)]" />
-          <TestnetBadge className="hidden sm:inline-flex" />
+          <NetworkSwitcher className="hidden sm:inline-flex" />
         </div>
 
         <nav className="hidden md:flex items-center gap-1">

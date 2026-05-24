@@ -11,6 +11,9 @@ import type {
 
 const MILD_DRIFT_CEILING_PCT = 10;
 
+/** Quote/funding asset treated as deployable cash when not an index allocation. */
+const CASH_SYMBOL = "USDC";
+
 export function assertAllocationsValid(config: IndexConfig): void {
   const { allocations } = config;
   if (allocations.length === 0) {
@@ -60,7 +63,18 @@ export function computePortfolio(
     return { symbol, balance, priceUsd, valueUsd: balance * priceUsd };
   });
 
-  const totalValueUsd = valued.reduce((sum, h) => sum + h.valueUsd, 0);
+  const holdingsValue = valued.reduce((sum, h) => sum + h.valueUsd, 0);
+
+  // Deployable cash: a USDC balance held in the account that is NOT itself an
+  // index allocation. Valued at its price, defaulting to $1 (dollar stablecoin)
+  // when none was fetched. Including it lets a cash-funded account rebalance
+  // INTO the index instead of reading as empty.
+  const allocationSymbols = new Set(config.allocations.map((a) => a.symbol));
+  const cashUsd = allocationSymbols.has(CASH_SYMBOL)
+    ? 0
+    : (balanceBySymbol.get(CASH_SYMBOL) ?? 0) * (priceBySymbol.get(CASH_SYMBOL) ?? 1);
+
+  const totalValueUsd = holdingsValue + cashUsd;
 
   const driftThresholdPct =
     config.trigger.kind === "drift" ? config.trigger.thresholdPct : 10;
@@ -90,6 +104,7 @@ export function computePortfolio(
   return {
     totalValueUsd,
     holdings,
+    cashUsd,
     needsRebalance,
     computedAt: now,
   };

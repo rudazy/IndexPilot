@@ -91,6 +91,7 @@ The user message is a JSON object with three top-level keys: portfolio, plan, pr
 portfolio.totalValueUsd — total portfolio value in USD at the time of computation.
 portfolio.holdings — array of { symbol, balance, priceUsd, valueUsd, currentWeight, targetWeight, driftPct, status }. driftPct is currentWeight minus targetWeight, both in percentage points. status is one of on-target, mild, rebalance.
 portfolio.needsRebalance — boolean, true if any holding has status === "rebalance".
+portfolio.cashUsd — USDC cash held in the account that is not an index allocation. It is dry powder being deployed by the plan's buy orders. When it is greater than zero, say how much cash is being put to work and which assets it is buying (e.g. "deploying the $1,000 USDC balance into BTC and ETH"). When it is zero, do not mention cash.
 
 plan.orders — array of { side, symbol, amountToken, amountUsd, priceUsd }. side is buy or sell. amountUsd is always positive. Orders are pre-sorted by amountUsd descending.
 plan.reason — short tag: on-target, drift-above-threshold, no-value.
@@ -135,6 +136,7 @@ Output only the five structured fields. No preamble, no sign-off, no markdown. E
 const RequestSchema = z.object({
   portfolio: z.object({
     totalValueUsd: z.number(),
+    cashUsd: z.number().optional(),
     holdings: z.array(
       z.object({
         symbol: z.string(),
@@ -214,6 +216,7 @@ export async function POST(request: Request) {
     {
       portfolio: {
         totalValueUsd: round(portfolio.totalValueUsd, 2),
+        cashUsd: round(portfolio.cashUsd ?? 0, 2),
         needsRebalance: portfolio.needsRebalance,
         holdings: portfolio.holdings.map((h) => ({
           symbol: h.symbol,

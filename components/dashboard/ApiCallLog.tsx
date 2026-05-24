@@ -33,11 +33,14 @@ export function ApiCallLog() {
 
   return (
     <div className="border border-[color:var(--color-border)] rounded-[10px] bg-[color:var(--color-surface)] overflow-hidden">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-[color:var(--color-surface-2)] transition-colors"
-      >
-        <div className="flex items-center gap-2.5">
+      {/* Header row: toggle and clear are siblings, never nested, so both can
+          be real buttons with no invalid-nesting hydration error. */}
+      <div className="flex items-stretch justify-between gap-3">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-2.5 flex-1 min-w-0 px-4 py-3 text-left hover:bg-[color:var(--color-surface-2)] transition-colors"
+          aria-expanded={expanded}
+        >
           {expanded ? (
             <ChevronDown className="h-3.5 w-3.5 text-[color:var(--color-fg-muted)]" />
           ) : (
@@ -46,24 +49,21 @@ export function ApiCallLog() {
           <span className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-fg)]">
             Live API calls
           </span>
-          <span className="text-[10px] font-mono text-[color:var(--color-fg-subtle)]">
+          <span className="text-xs font-mono text-[color:var(--color-fg-subtle)]">
             {calls.length === 0 ? "no calls yet" : `${calls.length} recent`}
           </span>
-        </div>
+        </button>
         {calls.length > 0 && (
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              clearApiCalls();
-            }}
-            className="inline-flex items-center gap-1 text-[10px] font-mono text-[color:var(--color-fg-subtle)] hover:text-[color:var(--color-danger)] transition-colors"
+            onClick={() => clearApiCalls()}
+            className="inline-flex items-center gap-1 px-4 py-3 text-xs font-mono text-[color:var(--color-fg-subtle)] hover:text-[color:var(--color-danger)] transition-colors shrink-0"
             aria-label="Clear API call log"
           >
             <Trash2 className="h-3 w-3" />
             clear
           </button>
         )}
-      </button>
+      </div>
 
       {expanded && (
         <div className="border-t border-[color:var(--color-border)]">
@@ -112,18 +112,18 @@ function ApiCallRow({ call }: { call: ApiCallEntry }) {
       >
         <StatusDot ok={call.ok} />
         <SourceBadge source={call.source} />
-        <span className="text-[11px] font-mono text-[color:var(--color-fg-muted)] tabular-nums w-[64px] shrink-0">
+        <span className="text-xs font-mono text-[color:var(--color-fg-muted)] tabular-nums w-[64px] shrink-0">
           {formatTime(call.timestamp)}
         </span>
         <span className="flex-1 min-w-0 text-xs text-[color:var(--color-fg)] truncate">
           {call.summary}
         </span>
-        <span className="text-[11px] font-mono text-[color:var(--color-fg-subtle)] tabular-nums w-[56px] text-right shrink-0">
+        <span className="text-xs font-mono text-[color:var(--color-fg-subtle)] tabular-nums w-[56px] text-right shrink-0">
           {call.latencyMs}ms
         </span>
         <span
           className={cn(
-            "text-[11px] font-mono tabular-nums w-[40px] text-right shrink-0",
+            "text-xs font-mono tabular-nums w-[40px] text-right shrink-0",
             call.ok
               ? "text-[color:var(--color-success)]"
               : "text-[color:var(--color-danger)]",
@@ -190,7 +190,7 @@ function SourceBadge({ source }: { source: ApiCallSource }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 px-1.5 h-[18px] rounded-[3px] text-[10px] font-mono shrink-0",
+        "inline-flex items-center gap-1 px-1.5 h-[18px] rounded-[3px] text-xs font-mono shrink-0",
         config.tone,
       )}
     >
@@ -214,7 +214,7 @@ function DetailRow({
   tone?: "default" | "warn";
 }) {
   return (
-    <div className="flex gap-3 text-[11px]">
+    <div className="flex gap-3 text-xs">
       <span className="text-[color:var(--color-fg-subtle)] font-mono w-[56px] shrink-0 uppercase tracking-wider">
         {label}
       </span>

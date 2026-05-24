@@ -14,15 +14,25 @@ const SLICE_PALETTE = [
   "#4d8ee8",
 ];
 
+// Distinct, non-palette tone so deployable USDC cash reads as separate from index assets.
+export const CASH_COLOR = "#3f6fb9";
+export const CASH_LABEL = "USDC cash";
+
 interface PortfolioChartProps {
   holdings: Holding[];
   mode: "current" | "target";
   totalUsd: number;
+  cashUsd?: number;
 }
 
-export function PortfolioChart({ holdings, mode, totalUsd }: PortfolioChartProps) {
+export function PortfolioChart({
+  holdings,
+  mode,
+  totalUsd,
+  cashUsd = 0,
+}: PortfolioChartProps) {
   const data = useMemo(() => {
-    return holdings.map((h, i) => ({
+    const slices = holdings.map((h, i) => ({
       name: h.symbol,
       value:
         mode === "current"
@@ -30,7 +40,16 @@ export function PortfolioChart({ holdings, mode, totalUsd }: PortfolioChartProps
           : Math.max(h.targetWeight, 0.0001),
       color: SLICE_PALETTE[i % SLICE_PALETTE.length],
     }));
-  }, [holdings, mode]);
+    // Cash is part of the *current* picture only — it has no target weight.
+    if (mode === "current" && cashUsd > 0 && totalUsd > 0) {
+      slices.push({
+        name: CASH_LABEL,
+        value: Math.max((cashUsd / totalUsd) * 100, 0.0001),
+        color: CASH_COLOR,
+      });
+    }
+    return slices;
+  }, [holdings, mode, cashUsd, totalUsd]);
 
   return (
     <div className="relative h-[240px] w-full">
@@ -68,15 +87,15 @@ export function PortfolioChart({ holdings, mode, totalUsd }: PortfolioChartProps
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <div className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
+        <div className="text-xs uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
           {mode === "current" ? "Current" : "Target"}
         </div>
-        <div className="text-lg font-medium mt-1 text-numeric">
+        <div className="text-xl font-medium mt-1 text-numeric">
           {mode === "current" ? formatUsd(totalUsd, 0) : "100%"}
         </div>
         {mode === "current" && (
-          <div className="text-[11px] text-[color:var(--color-fg-subtle)] mt-0.5">
-            {holdings.length} assets
+          <div className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">
+            {holdings.length} assets{cashUsd > 0 ? " + cash" : ""}
           </div>
         )}
       </div>
@@ -84,11 +103,19 @@ export function PortfolioChart({ holdings, mode, totalUsd }: PortfolioChartProps
   );
 }
 
-export function ChartLegend({ holdings }: { holdings: Holding[] }) {
+export function ChartLegend({
+  holdings,
+  cashUsd = 0,
+  totalUsd = 0,
+}: {
+  holdings: Holding[];
+  cashUsd?: number;
+  totalUsd?: number;
+}) {
   return (
     <div className="flex flex-wrap gap-3 justify-center mt-2">
       {holdings.map((h, i) => (
-        <div key={h.symbol} className="flex items-center gap-1.5 text-[11px]">
+        <div key={h.symbol} className="flex items-center gap-1.5 text-xs">
           <span
             className="inline-block h-2 w-2 rounded-full"
             style={{ backgroundColor: SLICE_PALETTE[i % SLICE_PALETTE.length] }}
@@ -99,6 +126,18 @@ export function ChartLegend({ holdings }: { holdings: Holding[] }) {
           </span>
         </div>
       ))}
+      {cashUsd > 0 && totalUsd > 0 && (
+        <div className="flex items-center gap-1.5 text-xs">
+          <span
+            className="inline-block h-2 w-2 rounded-full"
+            style={{ backgroundColor: CASH_COLOR }}
+          />
+          <span className="text-[color:var(--color-fg-muted)]">USDC</span>
+          <span className="text-[color:var(--color-fg-subtle)] text-numeric">
+            {((cashUsd / totalUsd) * 100).toFixed(1)}%
+          </span>
+        </div>
+      )}
     </div>
   );
 }

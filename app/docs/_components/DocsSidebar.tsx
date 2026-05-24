@@ -59,7 +59,7 @@ export function DocsSidebar() {
           </button>
         </div>
 
-        <p className="px-5 pt-6 pb-2 text-[10px] uppercase tracking-[0.18em] text-[color:var(--color-fg-subtle)]">
+        <p className="px-5 pt-6 pb-2 text-xs uppercase tracking-[0.18em] text-[color:var(--color-fg-subtle)]">
           Documentation
         </p>
 

@@ -21,9 +21,10 @@
   --color-danger: #e8553d;
   --color-danger-dim: #2e1512;
 
-  --font-display: var(--font-display-serif), ui-serif, Georgia, serif;
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+  /* Headings: Syne. Body: Inter. Mono: JetBrains Mono. No system-ui anywhere. */
+  --font-display: var(--font-syne), "Arial Black", sans-serif;
+  --font-sans: var(--font-inter), "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", monospace;
 
   --shadow-elev-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
   --shadow-elev-2: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 16px 32px -16px rgba(0, 0, 0, 0.6);
@@ -76,7 +77,7 @@
   h4 {
     font-family: var(--font-display);
     letter-spacing: -0.02em;
-    font-weight: 400;
+    font-weight: 700;
   }
 
   input,
@@ -99,7 +100,7 @@
 @layer components {
   .docs-prose :where(h2) {
     font-family: var(--font-display);
-    font-size: 30px;
+    font-size: 32px;
     line-height: 1.15;
     letter-spacing: -0.02em;
     color: var(--color-fg);
@@ -111,14 +112,14 @@
   }
   .docs-prose :where(h3) {
     font-family: var(--font-display);
-    font-size: 22px;
+    font-size: 24px;
     line-height: 1.2;
     color: var(--color-fg);
     margin-top: 36px;
     margin-bottom: 10px;
   }
   .docs-prose :where(p) {
-    font-size: 17px;
+    font-size: 16px;
     line-height: 1.7;
     color: var(--color-fg-muted);
     margin-bottom: 20px;
@@ -148,7 +149,7 @@
     margin-bottom: 20px;
   }
   .docs-prose :where(li) {
-    font-size: 17px;
+    font-size: 16px;
     line-height: 1.65;
     color: var(--color-fg-muted);
     margin-bottom: 10px;
@@ -171,7 +172,7 @@
     border-radius: 8px;
     padding: 16px;
     overflow-x: auto;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.6;
     margin: 24px 0;
   }
@@ -199,7 +200,7 @@
     text-align: left;
     padding: 12px 16px;
     color: var(--color-fg-subtle);
-    font-size: 11px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     font-weight: 500;
@@ -210,7 +211,7 @@
     color: var(--color-fg-muted);
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    font-size: 13px;
+    font-size: 12px;
   }
   .docs-prose :where(td:first-child) {
     color: var(--color-fg);
@@ -224,9 +225,8 @@
     margin: 24px 0;
     color: var(--color-fg);
     font-family: var(--font-display);
-    font-size: 19px;
+    font-size: 20px;
     line-height: 1.5;
-    font-style: italic;
   }
   .docs-prose :where(hr) {
     border: 0;

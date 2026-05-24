@@ -3,10 +3,11 @@ import { z } from "zod";
 import {
   SodexConfigError,
   executePlan,
+  fetchAccountBalances,
   getSodexNetwork,
   quotePlan,
 } from "@/lib/sodex";
-import type { SodexQuote } from "@/lib/sodexTypes";
+import type { SodexNetwork, SodexQuote } from "@/lib/sodexTypes";
 import type { RebalanceOrder } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -20,9 +21,12 @@ const OrderSchema = z.object({
   priceUsd: z.number().nonnegative(),
 });
 
+const NetworkSchema = z.enum(["testnet", "mainnet"]).optional();
+
 const QuoteRequest = z.object({
   action: z.literal("quote"),
   orders: z.array(OrderSchema).max(50),
+  network: NetworkSchema,
 });
 
 const QuoteSchema = z.object({
@@ -44,9 +48,19 @@ const QuoteSchema = z.object({
 const ExecuteRequest = z.object({
   action: z.literal("execute"),
   quotes: z.array(QuoteSchema).max(50),
+  network: NetworkSchema,
 });
 
-const RequestSchema = z.discriminatedUnion("action", [QuoteRequest, ExecuteRequest]);
+const BalancesRequest = z.object({
+  action: z.literal("balances"),
+  network: NetworkSchema,
+});
+
+const RequestSchema = z.discriminatedUnion("action", [
+  QuoteRequest,
+  ExecuteRequest,
+  BalancesRequest,
+]);
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -65,15 +79,40 @@ export async function POST(request: Request) {
   }
 
   if (parsed.data.action === "quote") {
-    return handleQuote(parsed.data.orders as RebalanceOrder[]);
+    return handleQuote(parsed.data.orders as RebalanceOrder[], parsed.data.network);
   }
-  return handleExecute(parsed.data.quotes as SodexQuote[]);
+  if (parsed.data.action === "balances") {
+    return handleBalances(parsed.data.network);
+  }
+  return handleExecute(parsed.data.quotes as SodexQuote[], parsed.data.network);
 }
 
-async function handleQuote(orders: RebalanceOrder[]) {
+async function handleBalances(network?: SodexNetwork) {
   const startedAt = Date.now();
   try {
-    const result = await quotePlan(orders);
+    const result = await fetchAccountBalances(network);
+    const totalLatencyMs = Date.now() - startedAt;
+    logCall("balances", {
+      network: result.network,
+      account: result.account.accountId,
+      assets: result.balances.length,
+      latencyMs: totalLatencyMs,
+    });
+    return NextResponse.json({
+      network: result.network,
+      account: result.account,
+      balances: result.balances,
+      meta: { upstreamCalls: result.upstreamCalls, totalLatencyMs },
+    });
+  } catch (err) {
+    return errorResponse(err, "balances");
+  }
+}
+
+async function handleQuote(orders: RebalanceOrder[], network?: SodexNetwork) {
+  const startedAt = Date.now();
+  try {
+    const result = await quotePlan(orders, network);
     const totalLatencyMs = Date.now() - startedAt;
     logCall("quote", {
       network: result.network,
@@ -94,10 +133,10 @@ async function handleQuote(orders: RebalanceOrder[]) {
   }
 }
 
-async function handleExecute(quotes: SodexQuote[]) {
+async function handleExecute(quotes: SodexQuote[], network?: SodexNetwork) {
   const startedAt = Date.now();
   try {
-    const result = await executePlan(quotes);
+    const result = await executePlan(quotes, network);
     const totalLatencyMs = Date.now() - startedAt;
     logCall("execute", {
       network: result.network,

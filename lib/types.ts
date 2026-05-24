@@ -63,6 +63,8 @@ export type DriftStatus = "on-target" | "mild" | "rebalance";
 export interface PortfolioState {
   totalValueUsd: number;
   holdings: Holding[];
+  /** USDC cash held in the account that isn't an index allocation — deployable into the index. */
+  cashUsd: number;
   needsRebalance: boolean;
   computedAt: number;
 }

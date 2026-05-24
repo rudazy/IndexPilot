@@ -19,10 +19,14 @@ export interface UseWalletBalancesResult {
   balances: WalletBalance[];
   isLoading: boolean;
   isError: boolean;
+  error: Error | null;
   refetch: () => void;
 }
 
-export function useWalletBalances(symbols: string[]): UseWalletBalancesResult {
+export function useWalletBalances(
+  symbols: string[],
+  enabled = true,
+): UseWalletBalancesResult {
   const { address, isConnected } = useAccount();
 
   const requested = useMemo(
@@ -42,7 +46,7 @@ export function useWalletBalances(symbols: string[]): UseWalletBalancesResult {
   const ethBalance = useBalance({
     address,
     chainId: mainnet.id,
-    query: { enabled: !!address && !!ethToken },
+    query: { enabled: enabled && !!address && !!ethToken },
   });
 
   const erc20Reads = useReadContracts({
@@ -55,7 +59,7 @@ export function useWalletBalances(symbols: string[]): UseWalletBalancesResult {
       ],
       chainId: mainnet.id,
     })),
-    query: { enabled: !!address && erc20Tokens.length > 0 },
+    query: { enabled: enabled && !!address && erc20Tokens.length > 0 },
   });
 
   const balances = useMemo<WalletBalance[]>(() => {
@@ -84,12 +88,23 @@ export function useWalletBalances(symbols: string[]): UseWalletBalancesResult {
   }, [requested, erc20Tokens, ethBalance.data, erc20Reads.data]);
 
   const isLoading =
-    (!!ethToken && ethBalance.isLoading) ||
-    (erc20Tokens.length > 0 && erc20Reads.isLoading);
+    enabled &&
+    ((!!ethToken && ethBalance.isLoading) ||
+      (erc20Tokens.length > 0 && erc20Reads.isLoading));
 
   const isError =
-    (!!ethToken && ethBalance.isError) ||
-    (erc20Tokens.length > 0 && erc20Reads.isError);
+    enabled &&
+    ((!!ethToken && ethBalance.isError) ||
+      (erc20Tokens.length > 0 && erc20Reads.isError));
+
+  // Surface the underlying wagmi/viem error so callers can show a real message
+  // instead of a generic "unknown error". Prefix to identify the failing read.
+  const rawError =
+    (ethToken && ethBalance.isError ? ethBalance.error : null) ??
+    (erc20Tokens.length > 0 && erc20Reads.isError ? erc20Reads.error : null);
+  const error = rawError
+    ? new Error(`Wallet balance read failed: ${rawError.message}`)
+    : null;
 
   return {
     address,
@@ -97,6 +112,7 @@ export function useWalletBalances(symbols: string[]): UseWalletBalancesResult {
     balances,
     isLoading,
     isError,
+    error,
     refetch: () => {
       void ethBalance.refetch();
       void erc20Reads.refetch();

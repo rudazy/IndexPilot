@@ -22,7 +22,7 @@ function Hero() {
     <section className="relative mx-auto w-full max-w-[1400px] px-6 pt-20 pb-32 sm:pt-32 sm:pb-40">
       <div className="grid gap-12 lg:grid-cols-[1.2fr_1fr] items-start">
         <div className="space-y-10">
-          <p className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--color-fg-subtle)]">
+          <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--color-fg-subtle)]">
             One-person index fund
           </p>
 
@@ -32,10 +32,10 @@ function Hero() {
           >
             Your personal<br />
             on-chain{" "}
-            <span className="italic text-[color:var(--color-accent)]">index fund.</span>
+            <span className="text-[color:var(--color-accent)]">index fund.</span>
           </h1>
 
-          <p className="text-lg sm:text-xl text-[color:var(--color-fg-muted)] max-w-[54ch] leading-relaxed">
+          <p className="text-xl sm:text-xl text-[color:var(--color-fg-muted)] max-w-[54ch] leading-relaxed">
             Set your weights. Watch for drift. Rebalance with precision — and have
             every decision explained in plain English.
           </p>
@@ -76,12 +76,12 @@ function HeroPanel() {
       <div className="relative rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-[var(--shadow-elev-2)]">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
+            <p className="text-xs uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
               Live preview
             </p>
             <p className="text-sm mt-1">My index</p>
           </div>
-          <span className="text-[10px] uppercase tracking-wide text-[color:var(--color-success)] bg-[color:var(--color-success-dim)] px-2 py-1 rounded">
+          <span className="text-xs uppercase tracking-wide text-[color:var(--color-success)] bg-[color:var(--color-success-dim)] px-2 py-1 rounded">
             Rebalanced
           </span>
         </div>
@@ -131,7 +131,7 @@ function PreviewRow({
           }}
         />
       </div>
-      <span className="text-[11px] text-numeric text-right text-[color:var(--color-fg-muted)]">
+      <span className="text-xs text-numeric text-right text-[color:var(--color-fg-muted)]">
         {current.toFixed(1)}%
       </span>
     </div>
@@ -184,16 +184,16 @@ function FeatureRow() {
 function SubHero() {
   return (
     <section className="mx-auto w-full max-w-[1400px] px-6 py-24 sm:py-32 grid gap-10 lg:grid-cols-[1fr_1.4fr] items-center">
-      <p className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--color-fg-subtle)]">
+      <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--color-fg-subtle)]">
         Built for clarity
       </p>
       <div className="space-y-6">
         <h2
-          className="text-3xl sm:text-4xl lg:text-5xl leading-tight text-[color:var(--color-fg)]"
+          className="text-2xl sm:text-[32px] lg:text-5xl leading-tight text-[color:var(--color-fg)]"
           style={{ fontFamily: "var(--font-display)" }}
         >
           An index manager that reads like a
-          <span className="italic text-[color:var(--color-accent)]"> trading desk memo</span>,
+          <span className="text-[color:var(--color-accent)]"> trading desk memo</span>,
           not a crypto dashboard.
         </h2>
         <p className="text-[color:var(--color-fg-muted)] leading-relaxed max-w-[56ch]">

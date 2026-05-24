@@ -69,7 +69,7 @@ function TokenGlyph({ symbol }: { symbol: string }) {
   return (
     <div
       className={cn(
-        "h-9 w-9 rounded-full flex items-center justify-center text-[11px] font-semibold",
+        "h-9 w-9 rounded-full flex items-center justify-center text-xs font-semibold",
         "bg-[color:var(--color-surface-2)] border border-[color:var(--color-border-strong)]",
         "text-[color:var(--color-fg)]",
       )}

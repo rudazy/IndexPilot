@@ -85,7 +85,7 @@ export function AIBriefing({
         />
       </div>
 
-      <div className="flex items-center justify-between gap-3 text-[10px] text-[color:var(--color-fg-subtle)] font-mono">
+      <div className="flex items-center justify-between gap-3 text-xs text-[color:var(--color-fg-subtle)] font-mono">
         <span>
           {meta && (
             <>
@@ -128,7 +128,7 @@ function Section({
     <div className="space-y-1">
       <div
         className={cn(
-          "flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em]",
+          "flex items-center gap-1.5 text-xs uppercase tracking-[0.12em]",
           tone === "warn"
             ? "text-[color:var(--color-warn)]"
             : "text-[color:var(--color-fg-subtle)]",

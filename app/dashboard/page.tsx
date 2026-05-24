@@ -19,6 +19,7 @@ import { useRebalance } from "@/hooks/useRebalance";
 import { useBriefing } from "@/hooks/useBriefing";
 import { appendActivity, loadActivity } from "@/lib/storage";
 import type { ActivityEvent } from "@/lib/types";
+import type { SodexNetwork } from "@/lib/sodexTypes";
 import { formatUsd, truncateAddress, uid } from "@/lib/utils";
 
 export default function DashboardPage() {
@@ -32,6 +33,7 @@ export default function DashboardPage() {
     walletAddress,
     isWalletConnected,
     hasHoldings,
+    network,
     isLoading,
     isError,
     error,
@@ -98,6 +100,7 @@ export default function DashboardPage() {
         <HeroBand
           indexName={config.name}
           totalUsd={portfolio?.totalValueUsd ?? 0}
+          cashUsd={portfolio?.cashUsd ?? 0}
           needsRebalance={needsRebalance}
           priceSource={priceSource}
           fetchedAt={fetchedAt}
@@ -108,12 +111,18 @@ export default function DashboardPage() {
 
         {!isWalletConnected && <ConnectWalletPrompt />}
 
-        {isWalletConnected && !hasHoldings && !isLoading && <EmptyWalletBanner />}
+        {isWalletConnected && !hasHoldings && !isLoading && (
+          <EmptyWalletBanner network={network} />
+        )}
 
         {isError && (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-[8px] bg-[color:var(--color-danger-dim)] text-[color:var(--color-danger)] text-sm">
-            <AlertTriangle className="h-4 w-4" />
-            Failed to load data: {error?.message ?? "unknown error"}
+          <div className="flex items-start gap-2 px-4 py-3 rounded-[8px] bg-[color:var(--color-danger-dim)] text-[color:var(--color-danger)] text-sm">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span className="min-w-0 break-words">
+              Failed to load data:{" "}
+              {error?.message ||
+                "no error message — check the Live API calls panel and browser console."}
+            </span>
           </div>
         )}
 
@@ -139,6 +148,7 @@ export default function DashboardPage() {
                       holdings={portfolio.holdings}
                       mode="current"
                       totalUsd={portfolio.totalValueUsd}
+                      cashUsd={portfolio.cashUsd}
                     />
                     <PortfolioChart
                       holdings={portfolio.holdings}
@@ -146,7 +156,11 @@ export default function DashboardPage() {
                       totalUsd={portfolio.totalValueUsd}
                     />
                   </div>
-                  <ChartLegend holdings={portfolio.holdings} />
+                  <ChartLegend
+                    holdings={portfolio.holdings}
+                    cashUsd={portfolio.cashUsd}
+                    totalUsd={portfolio.totalValueUsd}
+                  />
                 </>
               )}
             </CardBody>
@@ -164,7 +178,11 @@ export default function DashboardPage() {
             ) : isLoading || !portfolio ? (
               <TableSkeleton rows={config.allocations.length} />
             ) : (
-              <TokenTable holdings={portfolio.holdings} />
+              <TokenTable
+                holdings={portfolio.holdings}
+                cashUsd={portfolio.cashUsd}
+                totalUsd={portfolio.totalValueUsd}
+              />
             )}
           </Card>
         </div>
@@ -227,6 +245,7 @@ export default function DashboardPage() {
           pricesCount={prices.length}
           isWalletConnected={isWalletConnected}
           walletAddress={walletAddress}
+          network={network}
         />
       </main>
     </div>
@@ -236,6 +255,7 @@ export default function DashboardPage() {
 function HeroBand({
   indexName,
   totalUsd,
+  cashUsd,
   needsRebalance,
   priceSource,
   fetchedAt,
@@ -245,6 +265,7 @@ function HeroBand({
 }: {
   indexName: string;
   totalUsd: number;
+  cashUsd: number;
   needsRebalance: boolean;
   priceSource: "sosovalue" | null;
   fetchedAt: number | null;
@@ -255,22 +276,27 @@ function HeroBand({
   return (
     <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[color:var(--color-border)] pb-6">
       <div>
-        <p className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
+        <p className="text-xs uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
           {indexName}
         </p>
-        <h1 className="text-4xl sm:text-5xl font-normal mt-1 text-numeric">
+        <h1 className="text-[32px] sm:text-5xl font-normal mt-1 text-numeric">
           {formatUsd(totalUsd, 2)}
         </h1>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <PriceSourceTag source={priceSource} fetchedAt={fetchedAt} />
+          {cashUsd > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-xs px-2 h-5 rounded-[4px] bg-[color:var(--color-surface-2)] text-[color:var(--color-fg-muted)] font-mono border border-[color:var(--color-border-strong)]">
+              {formatUsd(cashUsd, 2)} USDC cash · deployable
+            </span>
+          )}
           {isWalletConnected && walletAddress && (
-            <span className="inline-flex items-center gap-1.5 text-[11px] px-2 h-5 rounded-[4px] bg-[color:var(--color-surface-2)] text-[color:var(--color-fg-muted)] font-mono border border-[color:var(--color-border-strong)]">
+            <span className="inline-flex items-center gap-1.5 text-xs px-2 h-5 rounded-[4px] bg-[color:var(--color-surface-2)] text-[color:var(--color-fg-muted)] font-mono border border-[color:var(--color-border-strong)]">
               <Wallet className="h-3 w-3" />
               {truncateAddress(walletAddress)}
             </span>
           )}
           {needsRebalance && (
-            <span className="text-[11px] px-2 h-5 inline-flex items-center rounded-[4px] bg-[color:var(--color-danger-dim)] text-[color:var(--color-danger)] uppercase tracking-wide">
+            <span className="text-xs px-2 h-5 inline-flex items-center rounded-[4px] bg-[color:var(--color-danger-dim)] text-[color:var(--color-danger)] uppercase tracking-wide">
               Rebalance recommended
             </span>
           )}
@@ -305,16 +331,21 @@ function ConnectWalletPrompt() {
   );
 }
 
-function EmptyWalletBanner() {
+function EmptyWalletBanner({ network }: { network: SodexNetwork }) {
+  const isTestnet = network === "testnet";
   return (
     <div className="flex items-start gap-3 p-4 rounded-[10px] bg-[color:var(--color-warn-dim)] border border-[color:var(--color-warn)]/30">
       <Inbox className="h-4 w-4 text-[color:var(--color-warn)] mt-0.5 shrink-0" />
       <div className="space-y-0.5">
         <p className="text-sm text-[color:var(--color-fg)]">
-          No holdings detected on Ethereum mainnet
+          {isTestnet
+            ? "No SoDEX testnet balance detected"
+            : "No holdings detected on Ethereum mainnet"}
         </p>
         <p className="text-xs text-[color:var(--color-fg-muted)]">
-          Deposit one of the index tokens to your connected wallet to populate the dashboard. Charts and the briefing will appear automatically.
+          {isTestnet
+            ? "Deposit funds into your SoDEX testnet account to populate the dashboard. Charts and the briefing will appear automatically."
+            : "Deposit one of the index tokens to your connected wallet to populate the dashboard. Charts and the briefing will appear automatically."}
         </p>
       </div>
     </div>
@@ -344,15 +375,19 @@ function DataFooter({
   pricesCount,
   isWalletConnected,
   walletAddress,
+  network,
 }: {
   pricesCount: number;
   isWalletConnected: boolean;
   walletAddress: `0x${string}` | undefined;
+  network: SodexNetwork;
 }) {
+  const sourceLabel = network === "testnet" ? "SoDEX testnet" : "mainnet";
+  const emptyLabel = network === "testnet" ? "no testnet account" : "wallet not connected";
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-[color:var(--color-border)] text-[11px] text-[color:var(--color-fg-subtle)] font-mono">
+    <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-[color:var(--color-border)] text-xs text-[color:var(--color-fg-subtle)] font-mono">
       <span>
-        Balances: {isWalletConnected && walletAddress ? `mainnet · ${truncateAddress(walletAddress)}` : "wallet not connected"}
+        Balances: {isWalletConnected && walletAddress ? `${sourceLabel} · ${truncateAddress(walletAddress)}` : emptyLabel}
       </span>
       <span>
         {pricesCount} price source{pricesCount === 1 ? "" : "s"} active

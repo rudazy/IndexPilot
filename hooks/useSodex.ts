@@ -2,6 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { addApiCall } from "@/lib/apiCallLog";
+import { useSodexNetwork } from "@/contexts/SodexNetworkContext";
 import type {
   SodexExecuteResponse,
   SodexQuote,
@@ -49,9 +50,11 @@ export interface UseSodexResult {
 }
 
 export function useSodex(): UseSodexResult {
+  const { network } = useSodexNetwork();
+
   const quoteMutation = useMutation<SodexQuoteResponse, Error, RebalanceOrder[]>({
     mutationFn: (orders) =>
-      postSodex<SodexQuoteResponse>({ action: "quote", orders }),
+      postSodex<SodexQuoteResponse>({ action: "quote", orders, network }),
     onSuccess: (data) => {
       const tradable = data.quotes.filter((q) => q.tradable).length;
       addApiCall({
@@ -72,7 +75,7 @@ export function useSodex(): UseSodexResult {
 
   const executeMutation = useMutation<SodexExecuteResponse, Error, SodexQuote[]>({
     mutationFn: (quotes) =>
-      postSodex<SodexExecuteResponse>({ action: "execute", quotes }),
+      postSodex<SodexExecuteResponse>({ action: "execute", quotes, network }),
     onSuccess: (data) => {
       addApiCall({
         source: "sodex",

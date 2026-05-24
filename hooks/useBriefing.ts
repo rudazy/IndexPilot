@@ -96,6 +96,7 @@ export function useBriefing(
         body: JSON.stringify({
           portfolio: {
             totalValueUsd: portfolio.totalValueUsd,
+            cashUsd: portfolio.cashUsd,
             needsRebalance: portfolio.needsRebalance,
             holdings: portfolio.holdings.map((h) => ({
               symbol: h.symbol,

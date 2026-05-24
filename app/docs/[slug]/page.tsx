@@ -38,7 +38,7 @@ export default async function DocSlugPage({ params }: PageProps) {
 
   return (
     <article>
-      <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--color-fg-subtle)] mb-4">
+      <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--color-fg-subtle)] mb-4">
         IndexPilot documentation
       </p>
       <h1
@@ -61,7 +61,7 @@ export default async function DocSlugPage({ params }: PageProps) {
             href={`/docs/${prev.slug}`}
             className="group text-left max-w-[45%]"
           >
-            <span className="block text-[10px] uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
+            <span className="block text-xs uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
               Previous
             </span>
             <span className="block mt-1 text-sm text-[color:var(--color-fg-muted)] group-hover:text-[color:var(--color-fg)] transition-colors">
@@ -76,7 +76,7 @@ export default async function DocSlugPage({ params }: PageProps) {
             href={`/docs/${next.slug}`}
             className="group text-right max-w-[45%]"
           >
-            <span className="block text-[10px] uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
+            <span className="block text-xs uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
               Next
             </span>
             <span className="mt-1 inline-flex items-center gap-1.5 text-sm text-[color:var(--color-fg-muted)] group-hover:text-[color:var(--color-accent)] transition-colors">

@@ -21,6 +21,7 @@ import { keccak256, toHex, type Hex } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import type { RebalanceOrder } from "./types";
 import type {
+  SodexAccountBalance,
   SodexAccountInfo,
   SodexNetwork,
   SodexOrderResult,
@@ -198,6 +199,75 @@ async function resolveAccount(
   return { address, accountId, ready: accountId > 0 };
 }
 
+// --- Account balances -----------------------------------------------------
+
+/** Resolve the account-owning address for read-only lookups (no signing key required). */
+function getAccountAddress(): string {
+  const explicit = process.env.SODEX_ACCOUNT_ADDRESS;
+  if (explicit) return explicit;
+  // Falls back to the signer's address; throws SodexConfigError if no key set.
+  return getSigner().account.address;
+}
+
+/** Map an engine asset name ("vETH", "vUSDC") to an index symbol ("ETH", "USDC"). */
+function normalizeAssetSymbol(asset: string): string {
+  return (asset.startsWith("v") ? asset.slice(1) : asset).toUpperCase();
+}
+
+interface RawBalance {
+  a?: string;
+  t?: string;
+  l?: string;
+}
+
+export interface SodexBalancesResult {
+  network: SodexNetwork;
+  account: SodexAccountInfo;
+  balances: SodexAccountBalance[];
+  upstreamCalls: SodexUpstreamCall[];
+}
+
+/**
+ * Read the SoDEX account's spot balances from /accounts/{address}/state (the
+ * `B` array). Read-only and unauthenticated; used to drive the testnet
+ * portfolio from the actual tradable account rather than an external wallet.
+ */
+export async function fetchAccountBalances(
+  networkOverride?: SodexNetwork,
+): Promise<SodexBalancesResult> {
+  const network = networkOverride ?? getSodexNetwork();
+  const { baseUrl } = NETWORKS[network];
+  const calls: SodexUpstreamCall[] = [];
+  const address = getAccountAddress();
+
+  const url = `${baseUrl}/accounts/${address}/state`;
+  const t = timed();
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    const json = (await res.json()) as {
+      code: number;
+      data?: { aid?: number; B?: RawBalance[] };
+    };
+    calls.push(t.mark({ url, status: res.status, ok: res.ok && json.code === 0 }));
+
+    const accountId = json.data?.aid ?? 0;
+    const balances: SodexAccountBalance[] = (json.data?.B ?? [])
+      .filter((b): b is Required<Pick<RawBalance, "a" | "t">> => !!b.a && b.t != null)
+      .map((b) => ({ symbol: normalizeAssetSymbol(b.a), amount: Number(b.t) }))
+      .filter((b) => Number.isFinite(b.amount));
+
+    return {
+      network,
+      account: { address, accountId, ready: accountId > 0 },
+      balances,
+      upstreamCalls: calls,
+    };
+  } catch (err) {
+    calls.push(t.mark({ url, status: 0, ok: false, error: errMessage(err) }));
+    throw err;
+  }
+}
+
 // --- Decimal serialization (load-bearing for the signature) ---------------
 
 /**
@@ -287,8 +357,11 @@ export interface QuotePlanResult {
  * Account resolution is skipped silently if credentials are absent so the
  * preview still works without a configured signer.
  */
-export async function quotePlan(orders: RebalanceOrder[]): Promise<QuotePlanResult> {
-  const network = getSodexNetwork();
+export async function quotePlan(
+  orders: RebalanceOrder[],
+  networkOverride?: SodexNetwork,
+): Promise<QuotePlanResult> {
+  const network = networkOverride ?? getSodexNetwork();
   const { baseUrl } = NETWORKS[network];
   const calls: SodexUpstreamCall[] = [];
 
@@ -420,8 +493,11 @@ interface RawOrderResult {
  * Requires a configured signer (throws SodexConfigError otherwise) and a
  * resolved account id > 0.
  */
-export async function executePlan(quotes: SodexQuote[]): Promise<ExecutePlanResult> {
-  const network = getSodexNetwork();
+export async function executePlan(
+  quotes: SodexQuote[],
+  networkOverride?: SodexNetwork,
+): Promise<ExecutePlanResult> {
+  const network = networkOverride ?? getSodexNetwork();
   const { baseUrl, chainId } = NETWORKS[network];
   const calls: SodexUpstreamCall[] = [];
 

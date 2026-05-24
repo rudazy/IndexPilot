@@ -87,6 +87,24 @@ export interface SodexOrderResult {
   raw: unknown;
 }
 
+/** One asset balance held in the SoDEX account, mapped to an index symbol. */
+export interface SodexAccountBalance {
+  /** Index token symbol (e.g. "ETH"), normalised from the engine's "vETH". */
+  symbol: string;
+  /** Total balance (includes locked). */
+  amount: number;
+}
+
+export interface SodexBalancesResponse {
+  network: SodexNetwork;
+  account: SodexAccountInfo;
+  balances: SodexAccountBalance[];
+  meta: {
+    upstreamCalls: SodexUpstreamCall[];
+    totalLatencyMs: number;
+  };
+}
+
 export interface SodexExecuteResponse {
   network: SodexNetwork;
   /** Engine envelope code; 0 means accepted. */
