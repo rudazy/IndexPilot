@@ -73,7 +73,7 @@ function HeroPanel() {
   return (
     <div className="relative mt-6 lg:mt-4">
       <div className="absolute -inset-px rounded-[18px] bg-gradient-to-br from-[color:var(--color-accent)]/40 via-transparent to-[color:var(--color-border)] opacity-60 blur-xl" />
-      <div className="relative rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-[var(--shadow-elev-2)]">
+      <div className="card-glass relative rounded-[16px] p-6 shadow-[var(--shadow-elev-2)]">
         <div className="flex items-center justify-between mb-5">
           <div>
             <p className="text-xs uppercase tracking-[0.15em] text-[color:var(--color-fg-subtle)]">
@@ -161,7 +161,7 @@ function FeatureRow() {
     <section className="border-y border-[color:var(--color-border)]">
       <div className="mx-auto w-full max-w-[1400px] px-6 py-20 grid gap-12 md:grid-cols-3">
         {features.map((f) => (
-          <div key={f.title} className="space-y-4">
+          <div key={f.title} className="card-glass rounded-[14px] p-6 space-y-4">
             <div className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-[color:var(--color-surface-2)] border border-[color:var(--color-border)] text-[color:var(--color-accent)]">
               {f.icon}
             </div>

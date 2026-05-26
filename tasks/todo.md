@@ -258,6 +258,37 @@ Testnet was abandoned (faucet/key friction); validated directly on mainnet with 
 - Multi-wallet / multi-chain
 - Server-side persistence (Wave 1 is localStorage only)
 
+## Completed 2026-05-26 — site-wide background + glass cards
+
+Two 21st.dev components installed by fetching their registry JSON directly (no
+`components.json` exists and there is no Tailwind config — the `shadcn add` CLI
+would have triggered an interactive `init` that hangs in a non-interactive shell):
+
+- **elegant-dark-pattern** (jatin-yadav05) — chosen as the base layer: dark radial
+  wash + skewed cyan streaks + noise/dot texture. Fits the restrained dark aesthetic.
+- **background-paths** (kokonutd) — chosen for the animated SVG path field overlay.
+
+Files:
+- `components/ui/elegant-dark-pattern.tsx` — `DarkGradientBg` (made the `className`
+  prop functional via `cn`; it was dead in the source).
+- `components/ui/background-paths.tsx` — `FloatingPaths` exported for reuse as a
+  bare layer; Button import repointed to the project's `@/components/ui/Button`.
+- `components/ui/SiteBackground.tsx` — composes `DarkGradientBg` base +
+  `FloatingPaths` (x2) at `opacity-40`, `pointer-events-none`, behind content.
+- `app/layout.tsx` — wraps the whole app in `<SiteBackground>`; added `dark` class
+  to `<html>`.
+- `app/globals.css` — `@custom-variant dark (&:where(.dark, .dark *))` to make
+  dark mode class-based (the components rely on `dark:` variants; Tailwind v4
+  defaults to prefers-color-scheme). Added `.card-glass` (rgba white bg + faint
+  border + 8px backdrop blur, with `-webkit-` prefix).
+- Glass applied to: `Card`, landing `HeroPanel`, `NetworkSwitcher` confirm modal,
+  `ApiCallLog`, dashboard connect-wallet banner. Docs layout bg made transparent;
+  docs sidebar switched to translucent blur (Header pattern) to avoid a seam.
+  Nested contrast surfaces (AIBriefing inner boxes, TriggerSelector options) left
+  solid to preserve hierarchy.
+- Installed `framer-motion@12.40.0` (exact-pinned, age-gated via existing `.npmrc`).
+- Verified: `tsc --noEmit` 0 errors, `next build` clean (13 routes).
+
 ## Lessons
 
 (none yet — will populate `tasks/lessons.md` as we go)

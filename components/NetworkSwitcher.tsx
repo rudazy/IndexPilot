@@ -121,7 +121,7 @@ function ConfirmMainnetDialog({
         onClick={(e) => e.stopPropagation()}
         className={cn(
           "w-full max-w-[420px] rounded-[10px] border border-[color:var(--color-border-strong)]",
-          "bg-[color:var(--color-surface)] p-5 shadow-[var(--shadow-elev-2)] fade-in-up",
+          "card-glass p-5 shadow-[var(--shadow-elev-2)] fade-in-up",
         )}
       >
         <div className="flex items-start gap-3">

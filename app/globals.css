@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "@rainbow-me/rainbowkit/styles.css";
 
+/* Class-based dark mode: dark: variants apply under .dark (set on <html>),
+   instead of following the OS prefers-color-scheme. The site is always dark. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-bg: #0a0a0a;
   --color-surface: #111111;
@@ -98,6 +102,14 @@
 }
 
 @layer components {
+  /* Frosted-glass surface for cards and panels, sitting over SiteBackground. */
+  .card-glass {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
   .docs-prose :where(h2) {
     font-family: var(--font-display);
     font-size: 32px;

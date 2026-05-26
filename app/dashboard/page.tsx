@@ -314,7 +314,7 @@ function HeroBand({
 
 function ConnectWalletPrompt() {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-[12px] bg-[color:var(--color-surface)] border border-[color:var(--color-accent)]/40">
+    <div className="card-glass flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-[12px] border border-[color:var(--color-accent)]/40">
       <div className="flex items-start gap-3">
         <Wallet className="h-5 w-5 text-[color:var(--color-accent)] mt-0.5 shrink-0" />
         <div>

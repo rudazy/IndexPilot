@@ -35,7 +35,7 @@ export function DocsSidebar() {
       <aside
         className={cn(
           "fixed top-0 left-0 h-screen w-[240px] z-40 flex flex-col",
-          "bg-[color:var(--color-bg)] border-r border-[color:var(--color-border)]",
+          "bg-[color:var(--color-bg)]/80 backdrop-blur-xl border-r border-[color:var(--color-border)]",
           "transition-transform duration-200 ease-out",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
           "md:translate-x-0",

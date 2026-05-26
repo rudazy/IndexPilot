@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Syne, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { SiteBackground } from "@/components/ui/SiteBackground";
 
 // Headings / display: geometric, confident.
 const syne = Syne({
@@ -50,11 +51,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${syne.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+      className={`dark ${syne.variable} ${inter.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
       <body className="min-h-screen flex flex-col">
-        <Providers>{children}</Providers>
+        <Providers>
+          <SiteBackground>{children}</SiteBackground>
+        </Providers>
       </body>
     </html>
   );

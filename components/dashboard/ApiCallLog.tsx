@@ -32,7 +32,7 @@ export function ApiCallLog() {
   const [expanded, setExpanded] = useState(true);
 
   return (
-    <div className="border border-[color:var(--color-border)] rounded-[10px] bg-[color:var(--color-surface)] overflow-hidden">
+    <div className="card-glass rounded-[10px] overflow-hidden">
       {/* Header row: toggle and clear are siblings, never nested, so both can
           be real buttons with no invalid-nesting hydration error. */}
       <div className="flex items-stretch justify-between gap-3">
