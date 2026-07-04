@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { TokenPicker } from "@/components/setup/TokenPicker";
 import { AllocationRow } from "@/components/setup/AllocationRow";
 import { TriggerSelector } from "@/components/setup/TriggerSelector";
+import { AutoRebalanceToggle } from "@/components/setup/AutoRebalanceToggle";
 import { findTokenBySymbol, TOKEN_CATALOG, type TokenCatalogEntry } from "@/lib/tokens";
 import type { IndexAllocation, IndexConfig, RebalanceTrigger } from "@/lib/types";
 import { loadConfig, saveConfig } from "@/lib/storage";
@@ -166,6 +167,18 @@ export default function SetupPage() {
           </CardHeader>
           <CardBody>
             <TriggerSelector value={trigger} onChange={setTrigger} />
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Automation</CardTitle>
+            <span className="text-xs text-[color:var(--color-fg-subtle)]">
+              Close the loop
+            </span>
+          </CardHeader>
+          <CardBody>
+            <AutoRebalanceToggle trigger={trigger} />
           </CardBody>
         </Card>
 

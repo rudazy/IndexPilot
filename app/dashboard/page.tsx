@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RefreshCw, Settings2, AlertTriangle, Wallet, Inbox } from "lucide-react";
@@ -14,13 +14,17 @@ import { RebalancePanel } from "@/components/dashboard/RebalancePanel";
 import { ActivityLog } from "@/components/dashboard/ActivityLog";
 import { ApiCallLog } from "@/components/dashboard/ApiCallLog";
 import { PriceSourceTag } from "@/components/dashboard/PriceSourceTag";
+import { MarketSignalChip } from "@/components/dashboard/MarketSignalChip";
+import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { useValueHistory } from "@/hooks/useValueHistory";
 import { useRebalance } from "@/hooks/useRebalance";
-import { useBriefing } from "@/hooks/useBriefing";
-import { appendActivity, loadActivity } from "@/lib/storage";
-import type { ActivityEvent } from "@/lib/types";
+import { useBriefing, type BriefingSignals } from "@/hooks/useBriefing";
+import { useSignals, type UseSignalsResult } from "@/hooks/useSignals";
+import { useAutoRebalance, type AutoRebalanceStatus } from "@/hooks/useAutoRebalance";
+import { Toaster } from "@/components/ui/Toaster";
 import type { SodexNetwork } from "@/lib/sodexTypes";
-import { formatUsd, truncateAddress, uid } from "@/lib/utils";
+import { cn, formatUsd, truncateAddress } from "@/lib/utils";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -40,6 +44,24 @@ export default function DashboardPage() {
     refetch,
   } = usePortfolio();
   const plan = useRebalance(portfolio);
+
+  const signalSymbols = useMemo(
+    () => config?.allocations.map((a) => a.symbol) ?? [],
+    [config],
+  );
+  const signalsQuery = useSignals(signalSymbols);
+  const briefingSignals = useMemo<BriefingSignals | null>(
+    () =>
+      signalsQuery.urgency
+        ? {
+            urgency: signalsQuery.urgency,
+            usedProxy: signalsQuery.usedProxy,
+            items: signalsQuery.signals,
+          }
+        : null,
+    [signalsQuery.urgency, signalsQuery.usedProxy, signalsQuery.signals],
+  );
+
   const {
     briefing,
     meta: briefingMeta,
@@ -53,14 +75,25 @@ export default function DashboardPage() {
     hasHoldings ? plan : null,
     prices,
     config?.name ?? null,
+    briefingSignals,
   );
 
-  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const { points: historyPoints } = useValueHistory(portfolio, prices, config, network);
+
+  const autoRebalance = useAutoRebalance({
+    portfolio,
+    plan,
+    config,
+    urgency: signalsQuery.urgency,
+    network,
+    briefingHeadline: briefing?.headline ?? null,
+    refetch,
+  });
+
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR-safe hydration from localStorage
-    setActivity(loadActivity());
     setHydrated(true);
   }, []);
 
@@ -71,23 +104,6 @@ export default function DashboardPage() {
   }, [hydrated, config, router]);
 
   const needsRebalance = portfolio?.needsRebalance ?? false;
-
-  const recordRebalance = () => {
-    if (!plan) return;
-    const event: ActivityEvent = {
-      id: uid("rb"),
-      timestamp: Date.now(),
-      kind: "rebalance-proposed",
-      summary:
-        plan.orders.length === 0
-          ? "No orders required."
-          : `${plan.orders.length} order${plan.orders.length === 1 ? "" : "s"} generated.`,
-      explanation: plan.explanation,
-      plan,
-    };
-    const next = appendActivity(event);
-    setActivity(next);
-  };
 
   if (!hydrated) return <ScreenSkeleton />;
   if (!config) return null;
@@ -106,6 +122,9 @@ export default function DashboardPage() {
           fetchedAt={fetchedAt}
           walletAddress={walletAddress}
           isWalletConnected={isWalletConnected}
+          signals={signalsQuery}
+          autoStatus={autoRebalance.status}
+          autoIntervalMs={autoRebalance.intervalMs}
           onRefresh={refetch}
         />
 
@@ -187,6 +206,24 @@ export default function DashboardPage() {
           </Card>
         </div>
 
+        <Card>
+          <CardHeader>
+            <CardTitle>Performance</CardTitle>
+            <span className="text-xs text-[color:var(--color-fg-subtle)]">
+              7 days · 5-min snapshots · {network}
+            </span>
+          </CardHeader>
+          <CardBody>
+            {!isWalletConnected ? (
+              <p className="text-sm text-[color:var(--color-fg-subtle)]">
+                Connect a wallet to start recording index value over time.
+              </p>
+            ) : (
+              <PerformanceChart points={historyPoints} />
+            )}
+          </CardBody>
+        </Card>
+
         <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
           <Card>
             <CardHeader>
@@ -214,7 +251,6 @@ export default function DashboardPage() {
                   briefingError={briefingError}
                   briefingErrorObj={briefingErrorObj}
                   onRefreshBriefing={refetchBriefing}
-                  onRecompute={recordRebalance}
                 />
               ) : (
                 <p className="text-sm text-[color:var(--color-fg-subtle)]">
@@ -235,7 +271,7 @@ export default function DashboardPage() {
                 Edit index
               </Link>
             </CardHeader>
-            <ActivityLog events={activity} />
+            <ActivityLog />
           </Card>
         </div>
 
@@ -248,6 +284,8 @@ export default function DashboardPage() {
           network={network}
         />
       </main>
+
+      <Toaster />
     </div>
   );
 }
@@ -261,6 +299,9 @@ function HeroBand({
   fetchedAt,
   walletAddress,
   isWalletConnected,
+  signals,
+  autoStatus,
+  autoIntervalMs,
   onRefresh,
 }: {
   indexName: string;
@@ -271,6 +312,9 @@ function HeroBand({
   fetchedAt: number | null;
   walletAddress: `0x${string}` | undefined;
   isWalletConnected: boolean;
+  signals: UseSignalsResult;
+  autoStatus: AutoRebalanceStatus;
+  autoIntervalMs: number;
   onRefresh: () => void;
 }) {
   return (
@@ -284,6 +328,13 @@ function HeroBand({
         </h1>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <PriceSourceTag source={priceSource} fetchedAt={fetchedAt} />
+          <MarketSignalChip
+            urgency={signals.urgency}
+            signals={signals.signals}
+            usedProxy={signals.usedProxy}
+            isLoading={signals.isLoading}
+            isError={signals.isError}
+          />
           {cashUsd > 0 && (
             <span className="inline-flex items-center gap-1.5 text-xs px-2 h-5 rounded-[4px] bg-[color:var(--color-surface-2)] text-[color:var(--color-fg-muted)] font-mono border border-[color:var(--color-border-strong)]">
               {formatUsd(cashUsd, 2)} USDC cash · deployable
@@ -303,12 +354,56 @@ function HeroBand({
         </div>
       </div>
       <div className="flex items-center gap-2">
+        {autoStatus !== "off" && (
+          <AutoModeIndicator status={autoStatus} intervalMs={autoIntervalMs} />
+        )}
         <Button variant="ghost" size="sm" onClick={onRefresh}>
           <RefreshCw className="h-3.5 w-3.5" />
           Refresh
         </Button>
       </div>
     </div>
+  );
+}
+
+function AutoModeIndicator({
+  status,
+  intervalMs,
+}: {
+  status: AutoRebalanceStatus;
+  intervalMs: number;
+}) {
+  const minutes = Math.round(intervalMs / 60000);
+  const active = status === "active";
+  const tooltip = active
+    ? `Auto-rebalance active. Checking every ${minutes} min.`
+    : status === "blocked-mainnet"
+      ? "Auto-rebalance paused: enable it on Mainnet from the setup page to confirm real-order execution."
+      : "Auto-rebalance idle: it needs a drift-based trigger (see setup).";
+
+  return (
+    <span className="relative group inline-flex items-center gap-1.5 px-2 h-8 text-xs font-mono text-[color:var(--color-fg-muted)] cursor-default">
+      <span
+        className={cn(
+          "h-2 w-2 rounded-full",
+          active
+            ? "bg-[color:var(--color-signal-low)] animate-pulse"
+            : "bg-[color:var(--color-warn)]",
+        )}
+      />
+      auto
+      <span
+        role="tooltip"
+        className={cn(
+          "pointer-events-none absolute right-0 top-full z-40 mt-1.5 w-max max-w-[280px]",
+          "rounded-[6px] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-3)]",
+          "px-2.5 py-1.5 text-xs text-[color:var(--color-fg)] shadow-[var(--shadow-elev-2)] font-sans",
+          "opacity-0 group-hover:opacity-100 transition-opacity text-left whitespace-normal",
+        )}
+      >
+        {tooltip}
+      </span>
+    </span>
   );
 }
 

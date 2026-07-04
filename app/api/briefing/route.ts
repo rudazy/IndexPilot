@@ -99,6 +99,10 @@ plan.explanation — IndexPilot's deterministic template explanation. Use it for
 
 prices — array of { symbol, priceUsd, change24hPct, fetchedAt, source }. change24hPct is a percent number, e.g. 4.12 means +4.12%.
 
+signals — OPTIONAL market-timing context from SoSoValue. When present it has { urgency, usedProxy, items }. urgency is one of low, medium, high, urgent: the app's combined read of how fast the market is moving right now. items is an array of { detail, level, kind, symbol }: detail is a ready-made factual one-liner (e.g. "BTC spot ETF saw $2.10B net inflow on 2026-07-02."), level is 0 (calm) to 3 (extreme), kind is etf-flow (institutional ETF net flows) or momentum (24h price move). usedProxy true means ETF flow data was unavailable and a 24h momentum reading stands in for it; in that case say "momentum" rather than claiming flow data.
+
+When signals are present, weave the highest-level item into the briefing: connect institutional flow or momentum to the drift and the timing of the plan (e.g. "BTC ETF took in $2.1B yesterday while your BTC leg sits 8% under target — drift is being driven by institutional demand, not noise"). One signal reference is enough; do not enumerate them all. If every item is level 0, you may note that the market backdrop is calm and the rebalance is housekeeping. Never invent flow numbers not present in items.
+
 # Two worked examples
 
 EXAMPLE A — clear single-asset drift
@@ -172,6 +176,20 @@ const RequestSchema = z.object({
       source: z.string(),
     }),
   ),
+  signals: z
+    .object({
+      urgency: z.enum(["low", "medium", "high", "urgent"]),
+      usedProxy: z.boolean(),
+      items: z.array(
+        z.object({
+          detail: z.string().max(300),
+          level: z.number().min(0).max(3),
+          kind: z.enum(["etf-flow", "momentum"]),
+          symbol: z.string(),
+        }),
+      ),
+    })
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -201,7 +219,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { portfolio, plan, prices } = parsed.data;
+  const { portfolio, plan, prices, signals } = parsed.data;
 
   if (portfolio.totalValueUsd <= 0) {
     return NextResponse.json(
@@ -246,6 +264,7 @@ export async function POST(request: Request) {
         change24hPct: round(p.change24hPct, 3),
         source: p.source,
       })),
+      ...(signals ? { signals } : {}),
     },
     null,
     0,

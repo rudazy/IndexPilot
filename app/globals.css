@@ -24,6 +24,10 @@
   --color-warn-dim: #2e2414;
   --color-danger: #e8553d;
   --color-danger-dim: #2e1512;
+  /* Market-signal "low" tone: electric lime, per the signal chip spec
+     (lime low / gold medium / red high+urgent). */
+  --color-signal-low: #c8f135;
+  --color-signal-low-dim: #26300b;
 
   /* Headings: Syne. Body: Inter. Mono: JetBrains Mono. No system-ui anywhere. */
   --font-display: var(--font-syne), "Arial Black", sans-serif;

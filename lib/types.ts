@@ -87,17 +87,10 @@ export interface RebalancePlan {
   computedAt: number;
 }
 
-export interface ActivityEvent {
-  id: string;
-  timestamp: number;
-  kind: "drift-detected" | "rebalance-proposed" | "rebalance-executed" | "config-updated";
-  summary: string;
-  explanation?: string;
-  plan?: RebalancePlan;
-}
-
+// Rebalance activity history moved to its own localStorage key with a typed
+// store in lib/activityLog.ts (RebalanceActivityEntry). StoredAppState now only
+// carries the index configuration.
 export interface StoredAppState {
   schemaVersion: 1;
   config: IndexConfig | null;
-  activity: ActivityEvent[];
 }

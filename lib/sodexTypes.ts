@@ -105,6 +105,29 @@ export interface SodexBalancesResponse {
   };
 }
 
+/** Fill status of one order, from GET /accounts/{addr}/orders polling. */
+export interface SodexOrderFillStatus {
+  clOrdId: string;
+  /** False when the order was not present in the account's order list. */
+  found: boolean;
+  orderId: string | null;
+  status: string | null;
+  filled: boolean;
+  filledQuantity: string | null;
+  avgFillPrice: string | null;
+  raw: unknown;
+}
+
+export interface SodexOrderStatusResponse {
+  network: SodexNetwork;
+  account: SodexAccountInfo;
+  statuses: SodexOrderFillStatus[];
+  meta: {
+    upstreamCalls: SodexUpstreamCall[];
+    totalLatencyMs: number;
+  };
+}
+
 export interface SodexExecuteResponse {
   network: SodexNetwork;
   /** Engine envelope code; 0 means accepted. */

@@ -1,4 +1,4 @@
-export type ApiCallSource = "prices" | "briefing" | "sodex";
+export type ApiCallSource = "prices" | "briefing" | "sodex" | "signals";
 
 export interface ApiCallEntry {
   id: string;

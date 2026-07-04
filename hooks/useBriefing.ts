@@ -7,7 +7,15 @@ import type {
   PriceSnapshot,
   RebalancePlan,
 } from "@/lib/types";
+import type { MarketSignal, RebalanceUrgency } from "@/lib/signalTypes";
 import { addApiCall } from "@/lib/apiCallLog";
+
+/** Market-signal context forwarded to the briefing model. */
+export interface BriefingSignals {
+  urgency: RebalanceUrgency;
+  usedProxy: boolean;
+  items: Pick<MarketSignal, "detail" | "level" | "kind" | "symbol">[];
+}
 
 export type BriefingConfidence = "high" | "medium" | "low";
 
@@ -62,6 +70,7 @@ export function useBriefing(
   plan: RebalancePlan | null,
   prices: PriceSnapshot[],
   indexName: string | null,
+  signals: BriefingSignals | null = null,
 ): UseBriefingResult {
   const planFingerprint = useMemo(() => {
     if (!plan) return null;
@@ -79,7 +88,9 @@ export function useBriefing(
     !!indexName;
 
   const query = useQuery<BriefingResponse, Error>({
-    queryKey: ["briefing", indexName, planFingerprint],
+    // Urgency is part of the key so the briefing refreshes when the market
+    // signal level changes, not just when the plan's orders change.
+    queryKey: ["briefing", indexName, planFingerprint, signals?.urgency ?? "no-signal"],
     enabled,
     staleTime: BRIEFING_STALE_MS,
     gcTime: BRIEFING_GC_MS,
@@ -126,6 +137,20 @@ export function useBriefing(
             change24hPct: p.change24hPct,
             source: p.source,
           })),
+          ...(signals
+            ? {
+                signals: {
+                  urgency: signals.urgency,
+                  usedProxy: signals.usedProxy,
+                  items: signals.items.map((s) => ({
+                    detail: s.detail,
+                    level: s.level,
+                    kind: s.kind,
+                    symbol: s.symbol,
+                  })),
+                },
+              }
+            : {}),
         }),
       });
 

@@ -9,6 +9,7 @@ import {
   Database,
   Sparkles,
   ArrowLeftRight,
+  Radio,
 } from "lucide-react";
 import {
   clearApiCalls,
@@ -89,10 +90,18 @@ function EmptyState() {
         Calls to{" "}
         <code className="font-mono text-[color:var(--color-fg-muted)]">
           /api/prices
+        </code>
+        ,{" "}
+        <code className="font-mono text-[color:var(--color-fg-muted)]">
+          /api/signals
+        </code>
+        ,{" "}
+        <code className="font-mono text-[color:var(--color-fg-muted)]">
+          /api/briefing
         </code>{" "}
         and{" "}
         <code className="font-mono text-[color:var(--color-fg-muted)]">
-          /api/briefing
+          /api/sodex
         </code>{" "}
         will appear here as they happen.
       </p>
@@ -181,11 +190,17 @@ function SourceBadge({ source }: { source: ApiCallSource }) {
             label: "sodex",
             tone: "bg-[color:var(--color-success-dim)] text-[color:var(--color-success)]",
           }
-        : {
-            icon: <Sparkles className="h-2.5 w-2.5" />,
-            label: "claude",
-            tone: "bg-[color:var(--color-warn-dim)] text-[color:var(--color-warn)]",
-          };
+        : source === "signals"
+          ? {
+              icon: <Radio className="h-2.5 w-2.5" />,
+              label: "signal",
+              tone: "bg-[color:var(--color-signal-low-dim)] text-[color:var(--color-signal-low)]",
+            }
+          : {
+              icon: <Sparkles className="h-2.5 w-2.5" />,
+              label: "claude",
+              tone: "bg-[color:var(--color-warn-dim)] text-[color:var(--color-warn)]",
+            };
 
   return (
     <span

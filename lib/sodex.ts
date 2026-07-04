@@ -268,6 +268,128 @@ export async function fetchAccountBalances(
   }
 }
 
+// --- Order status (fill confirmation) --------------------------------------
+
+// Confirmed live: GET /accounts/{addr}/orders returns
+// {code:0, timestamp, data:{blockTime, blockHeight, orders:[...]}} with an
+// empty list for unknown addresses. The populated per-order shape could not be
+// verified without a live fill, so extraction below tolerates the field-name
+// variants used across the Go SDK and Hyperliquid-style engines and always
+// preserves `raw`. Validate against a real fill before trusting the parsed
+// quantity/price fields.
+
+function pickString(obj: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const v = obj[key];
+    if (typeof v === "string" && v !== "") return v;
+    if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  }
+  return null;
+}
+
+export interface OrderFillStatus {
+  clOrdId: string;
+  /** False when the order was not present in the account's order list. */
+  found: boolean;
+  orderId: string | null;
+  status: string | null;
+  filled: boolean;
+  filledQuantity: string | null;
+  avgFillPrice: string | null;
+  raw: unknown;
+}
+
+export interface OrderStatusesResult {
+  network: SodexNetwork;
+  account: SodexAccountInfo;
+  statuses: OrderFillStatus[];
+  upstreamCalls: SodexUpstreamCall[];
+}
+
+/**
+ * Read the account's order list and report fill status for the requested
+ * client order ids. Read-only and unauthenticated (same endpoint family as
+ * the balance reads).
+ */
+export async function fetchOrderStatuses(
+  clOrdIds: string[],
+  networkOverride?: SodexNetwork,
+): Promise<OrderStatusesResult> {
+  const network = networkOverride ?? getSodexNetwork();
+  const { baseUrl } = NETWORKS[network];
+  const calls: SodexUpstreamCall[] = [];
+  const address = getAccountAddress();
+
+  const url = `${baseUrl}/accounts/${address}/orders`;
+  const t = timed();
+  let rawOrders: Record<string, unknown>[] = [];
+  let accountId = 0;
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    const json = (await res.json()) as {
+      code: number;
+      data?: { aid?: number; orders?: unknown[] };
+    };
+    calls.push(t.mark({ url, status: res.status, ok: res.ok && json.code === 0 }));
+    accountId = json.data?.aid ?? 0;
+    rawOrders = (json.data?.orders ?? []).filter(
+      (o): o is Record<string, unknown> => typeof o === "object" && o !== null,
+    );
+  } catch (err) {
+    calls.push(t.mark({ url, status: 0, ok: false, error: errMessage(err) }));
+    throw err;
+  }
+
+  const byClOrd = new Map<string, Record<string, unknown>>();
+  for (const o of rawOrders) {
+    const id = pickString(o, ["clOrdID", "clOrdId", "cloid", "c"]);
+    if (id) byClOrd.set(id, o);
+  }
+
+  const statuses: OrderFillStatus[] = clOrdIds.map((clOrdId) => {
+    const o = byClOrd.get(clOrdId);
+    if (!o) {
+      return {
+        clOrdId,
+        found: false,
+        orderId: null,
+        status: null,
+        filled: false,
+        filledQuantity: null,
+        avgFillPrice: null,
+        raw: null,
+      };
+    }
+    const status = pickString(o, ["status", "st", "state"]);
+    const normalized = status?.toUpperCase() ?? null;
+    return {
+      clOrdId,
+      found: true,
+      orderId: pickString(o, ["orderID", "orderId", "oid", "i"]),
+      status,
+      filled: normalized === "FILLED",
+      filledQuantity: pickString(o, [
+        "executedQuantity",
+        "executedQty",
+        "cumQuantity",
+        "cumQty",
+        "filledQuantity",
+        "z",
+        "eq",
+      ]),
+      avgFillPrice: pickString(o, ["avgPrice", "averagePrice", "avgPx", "ap"]),
+      raw: o,
+    };
+  });
+
+  return {
+    network,
+    account: { address, accountId, ready: accountId > 0 },
+    statuses,
+    upstreamCalls: calls,
+  };
+}
+
 // --- Decimal serialization (load-bearing for the signature) ---------------
 
 /**

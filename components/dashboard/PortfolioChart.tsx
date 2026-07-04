@@ -11,11 +11,11 @@ const SLICE_PALETTE = [
   "#8a8a8a",
   "#3fb96a",
   "#d4a24a",
-  "#4d8ee8",
+  "#c8f135",
 ];
 
 // Distinct, non-palette tone so deployable USDC cash reads as separate from index assets.
-export const CASH_COLOR = "#3f6fb9";
+export const CASH_COLOR = "#a89468";
 export const CASH_LABEL = "USDC cash";
 
 interface PortfolioChartProps {

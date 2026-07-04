@@ -4,6 +4,7 @@ import {
   SodexConfigError,
   executePlan,
   fetchAccountBalances,
+  fetchOrderStatuses,
   getSodexNetwork,
   quotePlan,
 } from "@/lib/sodex";
@@ -56,10 +57,17 @@ const BalancesRequest = z.object({
   network: NetworkSchema,
 });
 
+const OrderStatusRequest = z.object({
+  action: z.literal("orderStatus"),
+  clOrdIds: z.array(z.string().min(1).max(64)).min(1).max(50),
+  network: NetworkSchema,
+});
+
 const RequestSchema = z.discriminatedUnion("action", [
   QuoteRequest,
   ExecuteRequest,
   BalancesRequest,
+  OrderStatusRequest,
 ]);
 
 export async function POST(request: Request) {
@@ -84,7 +92,33 @@ export async function POST(request: Request) {
   if (parsed.data.action === "balances") {
     return handleBalances(parsed.data.network);
   }
+  if (parsed.data.action === "orderStatus") {
+    return handleOrderStatus(parsed.data.clOrdIds, parsed.data.network);
+  }
   return handleExecute(parsed.data.quotes as SodexQuote[], parsed.data.network);
+}
+
+async function handleOrderStatus(clOrdIds: string[], network?: SodexNetwork) {
+  const startedAt = Date.now();
+  try {
+    const result = await fetchOrderStatuses(clOrdIds, network);
+    const totalLatencyMs = Date.now() - startedAt;
+    logCall("orderStatus", {
+      network: result.network,
+      requested: clOrdIds.length,
+      found: result.statuses.filter((s) => s.found).length,
+      filled: result.statuses.filter((s) => s.filled).length,
+      latencyMs: totalLatencyMs,
+    });
+    return NextResponse.json({
+      network: result.network,
+      account: result.account,
+      statuses: result.statuses,
+      meta: { upstreamCalls: result.upstreamCalls, totalLatencyMs },
+    });
+  } catch (err) {
+    return errorResponse(err, "orderStatus");
+  }
 }
 
 async function handleBalances(network?: SodexNetwork) {

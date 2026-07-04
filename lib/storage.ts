@@ -1,13 +1,11 @@
-import type { ActivityEvent, IndexConfig, StoredAppState } from "./types";
+import type { IndexConfig, StoredAppState } from "./types";
 
 const STORAGE_KEY = "indexpilot.state.v1";
 const CURRENT_SCHEMA = 1 as const;
-const MAX_ACTIVITY_EVENTS = 200;
 
 const emptyState: StoredAppState = {
   schemaVersion: CURRENT_SCHEMA,
   config: null,
-  activity: [],
 };
 
 function isBrowser(): boolean {
@@ -15,7 +13,7 @@ function isBrowser(): boolean {
 }
 
 function freshState(): StoredAppState {
-  return { ...emptyState, activity: [] };
+  return { ...emptyState };
 }
 
 function readRaw(): StoredAppState {
@@ -28,10 +26,11 @@ function readRaw(): StoredAppState {
     const parsed = JSON.parse(raw) as unknown;
     if (!isStoredState(parsed)) return freshState();
     if (parsed.schemaVersion !== CURRENT_SCHEMA) return freshState();
+    // Legacy blobs may carry an `activity` array from before the log moved to
+    // its own key (lib/activityLog.ts); it is dropped on the next write.
     return {
       schemaVersion: parsed.schemaVersion,
       config: parsed.config,
-      activity: parsed.activity,
     };
   } catch {
     return freshState();
@@ -48,7 +47,6 @@ function isStoredState(value: unknown): value is StoredAppState {
   const v = value as Partial<StoredAppState>;
   return (
     typeof v.schemaVersion === "number" &&
-    Array.isArray(v.activity) &&
     (v.config === null || typeof v.config === "object")
   );
 }
@@ -65,22 +63,6 @@ export function saveConfig(config: IndexConfig): void {
 export function clearConfig(): void {
   const state = readRaw();
   writeRaw({ ...state, config: null });
-}
-
-export function loadActivity(): ActivityEvent[] {
-  return readRaw().activity;
-}
-
-export function appendActivity(event: ActivityEvent): ActivityEvent[] {
-  const state = readRaw();
-  const next = [event, ...state.activity].slice(0, MAX_ACTIVITY_EVENTS);
-  writeRaw({ ...state, activity: next });
-  return next;
-}
-
-export function clearActivity(): void {
-  const state = readRaw();
-  writeRaw({ ...state, activity: [] });
 }
 
 export function resetAll(): void {

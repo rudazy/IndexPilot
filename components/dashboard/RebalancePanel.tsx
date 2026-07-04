@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -13,7 +14,9 @@ import { Button } from "@/components/ui/Button";
 import { formatNumber, formatUsd } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { SODEX_APP_URL } from "@/lib/sodexTypes";
+import { addActivityEntry } from "@/lib/activityLog";
 import { useSodex } from "@/hooks/useSodex";
+import { useOrderFills, type FillPollState } from "@/hooks/useOrderFills";
 import { AIBriefing } from "./AIBriefing";
 import type { Briefing, BriefingMeta } from "@/hooks/useBriefing";
 
@@ -26,7 +29,6 @@ interface RebalancePanelProps {
   briefingError: boolean;
   briefingErrorObj: Error | null;
   onRefreshBriefing: () => void;
-  onRecompute?: () => void;
 }
 
 export function RebalancePanel({
@@ -38,7 +40,6 @@ export function RebalancePanel({
   briefingError,
   briefingErrorObj,
   onRefreshBriefing,
-  onRecompute,
 }: RebalancePanelProps) {
   const hasOrders = plan.orders.length > 0;
   const {
@@ -57,6 +58,34 @@ export function RebalancePanel({
   const account = quoteData?.account ?? null;
   const canExecute =
     tradableQuotes.length > 0 && account?.ready === true && !executeData;
+
+  // Record each execution in the persistent activity log exactly once. The
+  // entry id is kept so the fill poller can upgrade the status later.
+  const loggedExecution = useRef<unknown>(null);
+  const activityEntryIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!executeData || loggedExecution.current === executeData) return;
+    loggedExecution.current = executeData;
+    const resultByClOrd = new Map(executeData.results.map((r) => [r.clOrdId, r]));
+    const executedQuotes = quoteData?.quotes.filter((q) => resultByClOrd.has(q.clOrdId)) ?? [];
+    const entry = addActivityEntry({
+      network: executeData.network,
+      trigger: "manual",
+      orders: executedQuotes.map((q) => ({
+        side: q.side,
+        symbol: q.symbol,
+        amountUsd: q.estNotionalUsd,
+        orderId: resultByClOrd.get(q.clOrdId)?.orderId ?? null,
+      })),
+      totalUsd: executedQuotes.reduce((sum, q) => sum + q.estNotionalUsd, 0),
+      fillStatus: executeData.code === 0 ? "accepted" : "rejected",
+      briefingHeadline: briefing?.headline ?? null,
+    });
+    activityEntryIdRef.current = entry.id;
+  }, [executeData, quoteData, briefing]);
+
+  // Poll for fills after an accepted execution (3s cadence, 60s window).
+  const fills = useOrderFills(executeData, activityEntryIdRef);
 
   return (
     <div className="space-y-5">
@@ -138,16 +167,12 @@ export function RebalancePanel({
           ok={executeData.code === 0}
           results={executeData.results}
           network={executeData.network}
+          fillState={fills.state}
+          fillStatuses={fills.statuses}
         />
       )}
 
       <div className="flex flex-wrap items-center gap-2 pt-2">
-        {onRecompute && (
-          <Button variant="secondary" size="md" onClick={onRecompute}>
-            Recompute plan
-          </Button>
-        )}
-
         {!quoteData && (
           <Button
             variant="primary"
@@ -286,12 +311,24 @@ function SodexExecutionResult({
   ok,
   results,
   network,
+  fillState,
+  fillStatuses,
 }: {
   message: string;
   ok: boolean;
   results: import("@/lib/sodexTypes").SodexOrderResult[];
   network: string;
+  fillState: FillPollState;
+  fillStatuses: Map<string, import("@/lib/sodexTypes").SodexOrderFillStatus>;
 }) {
+  const headline = !ok
+    ? "Execution rejected"
+    : fillState === "filled"
+      ? "Filled"
+      : fillState === "pending"
+        ? "Pending"
+        : "Submitted to SoDEX";
+
   return (
     <div
       className={cn(
@@ -307,24 +344,57 @@ function SodexExecutionResult({
         ) : (
           <AlertTriangle className="h-4 w-4 text-[color:var(--color-danger)]" />
         )}
-        {ok ? "Submitted to SoDEX" : "Execution rejected"} · {network} — {message}
+        {headline} · {network} · {message}
+        {ok && fillState === "polling" && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-normal text-[color:var(--color-fg-muted)]">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            confirming fills
+          </span>
+        )}
       </div>
+
       <ul className="space-y-1">
-        {results.map((r) => (
-          <li
-            key={r.clOrdId}
-            className="flex items-center justify-between text-xs text-numeric"
-          >
-            <span className="capitalize">
-              {r.side} {r.symbol}
-            </span>
-            <span className="text-[color:var(--color-fg-muted)]">
-              {r.status}
-              {r.orderId ? ` · #${r.orderId}` : ""}
-            </span>
-          </li>
-        ))}
+        {results.map((r) => {
+          const fill = fillStatuses.get(r.clOrdId);
+          return (
+            <li
+              key={r.clOrdId}
+              className="flex items-center justify-between text-xs text-numeric"
+            >
+              <span className="capitalize">
+                {r.side} {r.symbol}
+              </span>
+              <span
+                className={cn(
+                  fill?.filled
+                    ? "text-[color:var(--color-success)]"
+                    : "text-[color:var(--color-fg-muted)]",
+                )}
+              >
+                {fill?.filled
+                  ? `Filled${fill.filledQuantity ? ` · ${fill.filledQuantity} ${r.symbol}` : ""}${fill.avgFillPrice ? ` @ ${formatUsd(Number(fill.avgFillPrice))}` : ""}`
+                  : fill?.status ?? r.status}
+                {r.orderId ? ` · #${r.orderId}` : ""}
+              </span>
+            </li>
+          );
+        })}
       </ul>
+
+      {ok && fillState === "pending" && (
+        <p className="text-xs text-[color:var(--color-fg-muted)] pt-1 border-t border-[color:var(--color-border)]">
+          Fill not confirmed within 60 seconds.{" "}
+          <a
+            href={SODEX_APP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-[color:var(--color-fg)] transition-colors"
+          >
+            Check SoDEX directly
+          </a>
+          .
+        </p>
+      )}
     </div>
   );
 }

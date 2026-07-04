@@ -289,6 +289,45 @@ Files:
 - Installed `framer-motion@12.40.0` (exact-pinned, age-gated via existing `.npmrc`).
 - Verified: `tsc --noEmit` 0 errors, `next build` clean (13 routes).
 
-## Lessons
+## Wave 3 COMPLETE 2026-07-03
 
-(none yet — will populate `tasks/lessons.md` as we go)
+All six deliverables built in one session on a fresh checkout (node_modules and .env.local were absent; deps reinstalled from lockfile). tsc 0 errors, eslint clean, `next build` 14 routes, prod smoke test passed (pages 200; /api/signals and /api/sodex return clean 503s without env keys). Nothing staged or committed.
+
+### 1. SoSoValue signal layer
+- `lib/sosovalue-signals.ts` (server-only): fetches v2 ETF net flows (`POST /openapi/v2/etf/historicalInflowChart`, types us-btc-spot / us-eth-spot) + 24h momentum per index asset (v1 market-snapshot). Scores each signal 0-3 via exported `SIGNAL_THRESHOLDS` (flow: 100M/500M/1B USD; momentum: 2/5/8 pct). Combined max level maps to `RebalanceUrgency` low/medium/high/urgent. ETF endpoint failure falls back to momentum labeled `proxy: true`.
+- Endpoints verified live as existing and key-gated (401 without key). Response parsing is tolerant (totalNetInflow/dailyNetInflow/netInflow, list wrapper). NEEDS a run with the real SOSOVALUE_API_KEY to confirm the plan includes v2 ETF endpoints; the proxy fallback covers the no case.
+- `lib/signalTypes.ts`: client-safe types + `URGENCY_RANK` (split out because sosovalue-signals is `server-only` and the auto loop needs the rank at runtime).
+- `app/api/signals/route.ts`: GET ?symbols=, 503 without key, 400 bad symbols, `[signals]` stdout log, s-maxage=300.
+- `hooks/useSignals.ts` (5-min react-query cadence, logs to apiCallLog as new source "signals"), `components/dashboard/MarketSignalChip.tsx` in the hero (lime low via new `--color-signal-low: #c8f135` token / gold medium / red high+urgent, hover tooltip lists each signal + source, "proxy" tag when proxied).
+- Briefing integration: request schema + system prompt extended with optional `signals` block; urgency is part of the briefing query key so it refreshes on signal change.
+
+### 2. Activity log persistence
+- `lib/activityLog.ts`: key `indexpilot.activityLog`, cap 50, pub/sub + localStorage, entries {id, timestamp, network, trigger manual|auto, orders[{side,symbol,amountUsd,orderId}], totalUsd, fillStatus accepted|filled|pending|rejected, briefingHeadline}. `updateActivityEntry` lets the fill poller upgrade status.
+- `ActivityLog.tsx` rewritten to render from this store (expandable rows, trigger/network badges). Old plumbing removed: `ActivityEvent` deleted from types.ts, activity functions deleted from storage.ts (legacy blobs still parse), dashboard "Recompute plan" button dropped (it only existed to write proposal events).
+- RebalancePanel writes an entry on every manual execution.
+
+### 3. Performance chart
+- `lib/valueHistory.ts`: key `indexpilot.valueHistory`, snapshot {t, actualUsd, targetUsd, network} at most every 5 min, 7-day retention, 2016 cap. Target counterfactual = perfectly-balanced portfolio at a per-network baseline (t0 total + prices) marked to current prices; baseline resets when allocations change.
+- `hooks/useValueHistory.ts` + `components/dashboard/PerformanceChart.tsx` (recharts LineChart, time-only axis, hover tooltip, solid accent = actual, dashed gray = target with legend; dash pattern is the CVD-safe secondary encoding). New full-width Performance card on the dashboard.
+
+### 4. Auto-triggered rebalancing
+- `lib/autoRebalance.ts`: key `indexpilot.autoRebalance` {enabled, intervalMs (5/15/60 min options), mainnetConfirmed}. Disabling revokes mainnet clearance.
+- `components/setup/AutoRebalanceToggle.tsx`: Automation card on /setup. Enabling while on mainnet opens a confirm modal (same pattern as NetworkSwitcher); testnet enables freely. Warns when trigger is time-based (auto needs drift).
+- `hooks/useAutoRebalance.ts`: interval tick forces refetch; fires quote+execute via /api/sodex when ALL hold: drift trigger + needsRebalance + urgency >= medium + mainnet gate. Refire protection: one execution per plan fingerprint + full-interval cooldown + concurrency guard. Writes activity entry (trigger "auto"), apiCallLog entries, and a toast.
+- `lib/toast.ts` + `components/ui/Toaster.tsx` (new, minimal pub/sub). Pulsing lime "auto" dot next to Refresh with status tooltip (active / blocked-mainnet / idle-trigger).
+
+### 5. Order fill confirmation
+- `lib/sodex.ts` `fetchOrderStatuses()`: GET /accounts/{addr}/orders (verified live: {code, timestamp, data:{blockTime, blockHeight, orders[]}}; any address returns code 0 + empty list). Populated per-order shape UNVERIFIED without a live fill; parser tolerates clOrdID/cloid/c, orderID/oid/i, status/st/state, executedQuantity/z/eq, avgPrice/ap variants and preserves raw. Validate the qty/price fields against a real fill.
+- `/api/sodex` new action "orderStatus" (Zod, clOrdIds max 50). `hooks/useOrderFills.ts`: 3s polls, 60s window; terminal filled/pending updates the activity entry and logs one apiCall summary. RebalancePanel result header shows Filled / Pending ("check SoDEX directly" link) / confirming-fills spinner; per-order rows show fill qty @ avg price when reported.
+
+### 6. README + housekeeping
+- README rewritten: signal layer + auto loop in architecture diagram and data flow, Wave 1/2/3 status table, Wave 3 verification section, env table matches .env.example. Corrected stale Wave 2 rows (SoDEX execution was still listed "pending" though validated on mainnet 2026-05-23).
+- `.env.example` RECREATED (was lost: `.gitignore` ignored `.env*` wholesale so it never got committed). `.gitignore` now has `!.env.example`.
+- Fixed pre-existing lint error in `components/ui/background-paths.tsx` (Math.random during render -> deterministic per-path stagger).
+- No-blue rule: replaced `#4d8ee8` pie slice with lime `#c8f135` and CASH_COLOR `#3f6fb9` with warm sand `#a89468` in PortfolioChart. NOTE: `elegant-dark-pattern.tsx` (site background) still contains cyan streak colors from the 21st.dev source; decide whether to recode it.
+
+### Pending for Ludarep
+1. `.env.local` must be recreated on this machine (fresh checkout has none): SOSOVALUE_API_KEY, ANTHROPIC_API_KEY, SODEX_* per `.env.example`. Keep `SODEX_NETWORK=testnet` for demos.
+2. Run once with the real SoSoValue key and check the Market Signal chip: if it shows "proxy", the API plan does not include the v2 ETF endpoints (architecture handles it, but worth knowing for the submission writeup).
+3. First real fill after this wave: confirm the fill poller's parsed quantity/price render correctly (tolerant parser, unverified field names).
+4. Review + commit the diff (18 modified, 16 new files).
