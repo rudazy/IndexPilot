@@ -1,65 +1,208 @@
 # IndexPilot
 
-A personal on-chain index fund with drift detection, SoSoValue-driven timing signals, AI-explained rebalancing, and autonomous execution on SoDEX.
+A personal on-chain index fund with drift detection, SoSoValue-driven timing signals, AI-explained rebalancing, and autonomous execution on SoDEX spot markets.
 
-## The problem
+## Contents
 
-Manual portfolio rebalancing is tedious and error-prone. You set target weights, prices move, weights drift, and either you forget to rebalance or you rebalance reactively without a clear thesis. Most retail tooling either hides the math behind a black box or dumps raw numbers without context.
+- [Overview](#overview)
+- [Features](#features)
+- [System architecture](#system-architecture)
+- [Data flow](#data-flow)
+- [Auto-rebalance decision loop](#auto-rebalance-decision-loop)
+- [Execution pipeline](#execution-pipeline)
+- [Project structure](#project-structure)
+- [Stack](#stack)
+- [Getting started](#getting-started)
+- [Environment variables](#environment-variables)
+- [Scripts](#scripts)
+- [Release status](#release-status)
+- [Observability](#observability)
+- [Security posture](#security-posture)
+- [License](#license)
 
-IndexPilot keeps the math transparent and the explanation specific. Every rebalance plan is a deterministic function of live prices, target weights, and a drift threshold. Every plan is paired with a written briefing that cites the exact drift figures, 24-hour price moves, and institutional ETF flows behind each trade. And when auto mode is on, the loop closes itself: drift past threshold plus a live market signal triggers real execution.
+## Overview
 
-## What it does
+Manual portfolio rebalancing is tedious and error-prone. You set target weights, prices move, weights drift, and you either forget to rebalance or rebalance reactively without a clear thesis. Most retail tooling hides the math behind a black box or dumps raw numbers without context.
 
-- Build a custom crypto index from a curated token list with live 100% allocation validation.
-- Pull live market data from the SoSoValue API on a 5-minute cadence.
-- Compute a market-signal urgency score (low / medium / high / urgent) from SoSoValue spot ETF net flows and 24h momentum, shown as a color-coded chip on the dashboard.
-- Compute current weight, target weight, drift percentage, and status (on-target / mild / rebalance) per asset.
-- Generate a deterministic rebalance plan: ordered buy/sell list with token amount, USD amount, and execution price.
-- Write a structured AI briefing (headline, drift summary, trade rationale, risk note, confidence) that ties ETF flow and momentum signals to the plan.
-- Execute the plan on SoDEX spot markets with server-side EIP-712 signing, then poll for fill confirmation and show fill price and quantity.
-- Auto-rebalance: an opt-in loop that checks drift on a configurable cadence and executes without a click when drift breaches the threshold and the market signal is medium or above. Mainnet auto-execution requires an explicit confirmation.
-- Track index value over time (7 days at 5-minute resolution) and chart it against the perfectly-balanced counterfactual.
-- Persist every executed rebalance (timestamp, network, orders, notional, fill status, briefing headline) to a capped activity log.
-- Surface every upstream API call in the dashboard so users can verify the data path end to end.
+IndexPilot keeps the math transparent and the explanation specific:
 
-## Architecture
+- **Deterministic plans.** Every rebalance plan is a pure function of live prices, target weights, and a drift threshold. No hidden heuristics.
+- **Explained trades.** Every plan is paired with a structured AI briefing that cites the exact drift figures, 24-hour price moves, and institutional ETF flows behind each trade.
+- **A closed loop.** With auto mode enabled, drift past threshold plus a live market signal triggers real execution on SoDEX — quoted, signed, submitted, and fill-confirmed without a click.
 
+## Features
+
+| Capability | Description |
+| --- | --- |
+| Index builder | Curated token list with live 100% allocation validation and even-split helper |
+| Live market data | SoSoValue Open API prices on a 5-minute cadence, proxied server-side |
+| Market signal layer | Urgency score (low / medium / high / urgent) derived from spot ETF net flows and 24h momentum |
+| Drift detection | Per-asset current weight, target weight, drift percentage, and status |
+| Rebalance planning | Deterministic ordered buy/sell list with token amount, USD amount, and execution price |
+| AI briefing | Structured output (headline, drift summary, trade rationale, risk note, confidence) tying signals to the plan |
+| SoDEX execution | Quote, server-side EIP-712 signing, batch order submission, fill-confirmation polling |
+| Auto-rebalance | Opt-in loop gated on drift trigger, signal urgency, and an explicit mainnet confirmation |
+| Performance tracking | Index value vs perfectly-balanced counterfactual, 7 days at 5-minute resolution |
+| Activity log | Persistent record of every execution: orders, notional, fill status, briefing headline |
+| API inspector | Dashboard tray surfacing every upstream call with status, latency, and token usage |
+
+## System architecture
+
+Client pages talk only to the app's own API routes; every external key stays server-side. Deterministic math (`lib/rebalance.ts`) runs client-side on data the API routes return.
+
+```mermaid
+flowchart TB
+    subgraph client["Client (browser)"]
+        setup["/setup<br/>Index builder + automation settings"]
+        dashboard["/dashboard<br/>Portfolio · Signal chip · AI briefing<br/>Performance · Activity · API inspector"]
+        rebalance["lib/rebalance.ts<br/>Pure drift math + plan generator"]
+        storage[("localStorage<br/>config · activity log<br/>value history · auto settings")]
+    end
+
+    subgraph api["API routes (server-side, keys never leave)"]
+        prices["/api/prices<br/>Snapshot proxy + call metadata"]
+        signals["/api/signals<br/>ETF flows + momentum → urgency"]
+        briefing["/api/briefing<br/>Structured AI briefing"]
+        sodex["/api/sodex<br/>Quote · EIP-712 sign · execute · fills"]
+    end
+
+    subgraph upstream["Upstream services"]
+        sosov1["SoSoValue v1<br/>market-snapshot"]
+        sosov2["SoSoValue v2<br/>ETF inflow endpoints"]
+        anthropic["Anthropic Messages API<br/>claude-sonnet-4-6"]
+        sodexEngine["SoDEX spot engine<br/>EIP-712 verified orders"]
+        chain["Ethereum mainnet RPC<br/>ERC-20 balance reads"]
+    end
+
+    setup --> storage
+    dashboard <--> storage
+    dashboard --> rebalance
+    dashboard --> prices
+    dashboard --> signals
+    dashboard --> briefing
+    dashboard --> sodex
+    dashboard --> chain
+
+    prices --> sosov1
+    signals --> sosov2
+    signals --> sosov1
+    briefing --> anthropic
+    sodex --> sodexEngine
+
+    classDef surface fill:#141414,stroke:#333333,color:#f5f5f5
+    classDef accent fill:#141414,stroke:#c8f135,color:#f5f5f5
+    classDef store fill:#111111,stroke:#333333,color:#a3a3a3
+    class setup,dashboard,rebalance,prices,signals,briefing,sodex surface
+    class sosov1,sosov2,anthropic,sodexEngine,chain accent
+    class storage store
 ```
-┌───────────────┐   ┌───────────────────────────────┐   ┌─────────────────────┐
-│ /setup        │   │ /dashboard                    │   │ localStorage        │
-│ Index builder │──▶│ Portfolio · Signal chip · AI  │◀─▶│ config · activity   │
-│ + auto toggle │   │ Briefing · Performance · Log  │   │ history · settings  │
-└───────────────┘   └──────────────┬────────────────┘   └─────────────────────┘
-                                   │
-        ┌──────────────┬───────────┼─────────────┬────────────────┐
-        ▼              ▼           ▼             ▼                ▼
-┌──────────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐ ┌──────────────┐
-│ /api/prices  │ │ /api/      │ │ lib/     │ │ /api/briefing│ │ /api/sodex   │
-│ snapshot     │ │ signals    │ │ rebalance│ │ Claude       │ │ quote · sign │
-│ proxy        │ │ ETF flows +│ │ (pure)   │ │ (Sonnet 4.6) │ │ execute ·    │
-│              │ │ momentum   │ │          │ │              │ │ fill status  │
-└──────┬───────┘ └─────┬──────┘ └────┬─────┘ └──────┬───────┘ └──────┬───────┘
-       │               │             │              │                │
-       ▼               ▼             ▼              ▼                ▼
-┌──────────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐ ┌──────────────┐
-│ SoSoValue v1 │ │ SoSoValue  │ │ Portfolio│ │ Structured   │ │ SoDEX spot   │
-│ /market-     │ │ v2 /etf/*  │ │ + Plan   │ │ briefing     │ │ engine       │
-│  snapshot    │ │ endpoints  │ │ objects  │ │ JSON         │ │ (EIP-712)    │
-└──────────────┘ └────────────┘ └──────────┘ └──────────────┘ └──────────────┘
+
+## Data flow
+
+One dashboard render, end to end. Prices and signals refresh on a 5-minute cadence; the briefing re-fires only when the plan's order signature materially changes.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant D as Dashboard
+    participant P as /api/prices
+    participant S as /api/signals
+    participant W as Wallet (wagmi)
+    participant B as /api/briefing
+    participant SV as SoSoValue
+    participant A as Anthropic API
+
+    D->>P: GET ?symbols=BTC,ETH,...
+    P->>SV: v1 market-snapshot per symbol (x-soso-api-key)
+    SV-->>P: price + 24h change per token
+    P-->>D: prices + per-call upstream metadata
+
+    D->>S: GET ?symbols=...
+    S->>SV: v2 ETF net flows (BTC, ETH spot) + 24h momentum
+    SV-->>S: flow + momentum data
+    Note over S: Score each signal 0-3 against thresholds.<br/>If ETF endpoints unavailable, momentum<br/>stands in, labeled "proxy" in the UI.
+    S-->>D: signals + combined urgency
+
+    D->>W: read native + ERC-20 balances (mainnet)
+    W-->>D: raw balances
+
+    Note over D: usePortfolio joins balances + prices →<br/>computePortfolio() → generateRebalancePlan()<br/>(pure functions, lib/rebalance.ts)
+
+    D->>B: POST portfolio + plan + signals
+    B->>A: Messages API, prompt-cached system prompt,<br/>Zod-validated structured output
+    A-->>B: {headline, drift_summary, trade_rationale,<br/>risk_note, confidence}
+    B-->>D: briefing + model/latency/token metadata
 ```
 
-**Data flow per dashboard render:**
+Alongside this, `useValueHistory` records a `{ timestamp, actualUsd, targetUsd, network }` snapshot at most every 5 minutes (7-day retention) and feeds the performance chart: actual index value versus the perfectly-balanced counterfactual.
 
-1. `usePrices(symbols)` calls `/api/prices?symbols=...`. The server route signs each per-symbol request with `x-soso-api-key` against `openapi.sosovalue.com/openapi/v1/currencies/{id}/market-snapshot`, normalizes the envelope, and returns `{ prices, source, fetchedAt, meta }` with one `upstreamCalls[]` entry per token.
-2. `useSignals(symbols)` calls `/api/signals?symbols=...`. The server fetches SoSoValue v2 ETF net-flow data (`/openapi/v2/etf/historicalInflowChart` for `us-btc-spot` and `us-eth-spot`) plus 24h momentum per index asset, scores each signal 0-3 against configurable thresholds (`lib/sosovalue-signals.ts`), and returns the combined `RebalanceUrgency`. If the ETF endpoints are unavailable on the API plan, 24h momentum stands in as the flow proxy and is labeled as such in the UI.
-3. Balances are read from the connected wallet on Ethereum mainnet (wagmi `useReadContracts`) or from the SoDEX account on testnet. `usePortfolio` joins balances with prices and computes per-asset drift via the pure `computePortfolio()` in `lib/rebalance.ts`.
-4. `useRebalance(portfolio)` runs `generateRebalancePlan()` to produce the ordered buy/sell list.
-5. `useBriefing(portfolio, plan, prices, indexName, signals)` POSTs everything to `/api/briefing`, which calls the Anthropic Messages API (`claude-sonnet-4-6`) with a prompt-cached system prompt and a Zod-validated structured response format. The signal block lets the briefing connect institutional flows to the drift ("BTC ETF took in $2.1B while your BTC leg sits 8% under target").
-6. `useValueHistory` records a `{ timestamp, totalValueUsd, targetUsd, network }` snapshot at most every 5 minutes (7-day retention) and feeds the performance chart: actual index value vs the perfectly-balanced counterfactual.
-7. Execution: quote maps plan legs onto SoDEX markets (step sizes, minimum notionals, fees); execute signs a `batchNewOrder` action with EIP-712 server-side and submits it. After acceptance, `/api/sodex` `orderStatus` polls `GET /accounts/{addr}/orders` every 3 seconds for up to 60 seconds to confirm fills.
-8. Auto mode (`useAutoRebalance`): while enabled, drift is re-checked on the configured cadence. Execution fires only when the index uses a drift trigger, drift breaches it, urgency is medium or above, and (on mainnet) the user confirmed auto-execution in a modal. One execution per plan fingerprint plus a full-interval cooldown prevent refires.
+## Auto-rebalance decision loop
 
-## File structure
+Auto mode never fires on a single condition. Every gate below must pass on the same tick, and two refire protections apply on top: one execution per plan fingerprint, plus a full-interval cooldown.
+
+```mermaid
+flowchart TB
+    tick(["Interval tick<br/>(5 / 15 / 60 min, user-configured)"]) --> refetch["Force-refetch prices + signals"]
+    refetch --> g1{"Index uses a<br/>drift trigger?"}
+    g1 -- "no (time-based)" --> idle(["Idle — auto needs a drift trigger"])
+    g1 -- yes --> g2{"Drift breaches<br/>threshold?"}
+    g2 -- no --> wait(["Wait for next tick"])
+    g2 -- yes --> g3{"Signal urgency<br/>≥ medium?"}
+    g3 -- no --> wait
+    g3 -- yes --> g4{"Mainnet?"}
+    g4 -- "yes, unconfirmed" --> blocked(["Blocked — mainnet requires<br/>explicit confirmation modal"])
+    g4 -- "testnet, or confirmed" --> g5{"Plan fingerprint already<br/>executed, or in cooldown?"}
+    g5 -- yes --> wait
+    g5 -- no --> exec["Quote + execute via /api/sodex"]
+    exec --> record["Write activity entry (trigger: auto)<br/>+ API log entry + toast"]
+
+    classDef gate fill:#141414,stroke:#333333,color:#f5f5f5
+    classDef stop fill:#111111,stroke:#333333,color:#a3a3a3
+    classDef go fill:#141414,stroke:#c8f135,color:#f5f5f5
+    class g1,g2,g3,g4,g5 gate
+    class idle,wait,blocked stop
+    class tick,refetch,exec,record go
+```
+
+Disabling auto mode revokes the mainnet clearance; re-enabling requires confirming again.
+
+## Execution pipeline
+
+SoDEX authentication is Hyperliquid-style: an API key name in the header plus private-key EIP-712 signing, which a browser wallet cannot perform. Signing therefore happens server-side with a dedicated API wallet. The full pipeline was validated on mainnet with a real fill.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User / auto loop
+    participant R as /api/sodex
+    participant L as lib/sodex.ts (server-only)
+    participant X as SoDEX engine
+
+    U->>R: action: "quote" (plan orders)
+    R->>L: quotePlan()
+    L->>X: GET /markets/symbols
+    X-->>L: step sizes, tick sizes, min notional, fees
+    Note over L: Floor quantities to step size, gate on<br/>$5 min notional, skip cash + halted + dust legs
+    L-->>U: tradable legs + skipped legs with reasons
+
+    U->>R: action: "execute"
+    R->>L: executePlan()
+    Note over L: Build batchNewOrder payload (exact field order)<br/>→ keccak256 hash → EIP-712 signTypedData<br/>→ v normalized 27/28 → 0/1, 0x01 prefix
+    L->>X: POST /trade/orders/batch<br/>(X-API-Key / X-API-Sign / X-API-Nonce)
+    X-->>L: per-order { code, clOrdID, orderID }
+    L-->>U: accepted orders
+
+    loop every 3s, up to 60s
+        U->>R: action: "orderStatus"
+        R->>X: GET /accounts/{addr}/orders
+        X-->>U: fill status, executed qty, avg price
+    end
+    Note over U: Terminal status updates the activity log entry<br/>(accepted → filled / pending / rejected)
+```
+
+Market orders use `funds` (USDC) on buys and `quantity` (base asset) on sells, with IOC time-in-force.
+
+## Project structure
 
 ```
 app/
@@ -125,16 +268,16 @@ lib/
 | AI briefing | Anthropic Messages API (`claude-sonnet-4-6`) with Zod-validated structured outputs and prompt caching |
 | Execution | SoDEX spot (server-side EIP-712 signing, validated on mainnet with a real fill) |
 
-## Setup
+## Getting started
 
 ```bash
 npm install
 cp .env.example .env.local
-# fill in the SOSOVALUE_API_KEY and ANTHROPIC_API_KEY values
+# fill in SOSOVALUE_API_KEY and ANTHROPIC_API_KEY at minimum
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000`. Without SoDEX credentials the app runs fully in read-and-plan mode; the execution endpoints return a clear 503 with instructions.
 
 ## Environment variables
 
@@ -161,26 +304,30 @@ npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 ```
 
-## Wave status
+## Release status
 
 | Capability | Wave 1 | Wave 2 | Wave 3 |
 | --- | --- | --- | --- |
 | Index builder UI | shipped | shipped | + automation settings |
 | Live prices (SoSoValue) | shipped | + per-call metadata | shipped |
-| SoSoValue signal layer (ETF flows, momentum, urgency) | not present | not present | **shipped** |
+| Market signal layer (ETF flows, momentum, urgency) | — | — | **shipped** |
 | Drift math and plan generator | shipped | shipped | shipped |
 | Plan explanation | templated string | AI briefing (structured output) | + signal-aware timing context |
 | SoDEX execution | typed empty slot | **shipped** (EIP-712, validated with a real mainnet fill) | + fill confirmation polling |
-| Auto-triggered rebalancing | not present | not present | **shipped** (drift + urgency gated, mainnet confirm) |
+| Auto-triggered rebalancing | — | — | **shipped** (drift + urgency gated, mainnet confirm) |
 | Activity log | in-memory only | in-memory only | **persistent** (localStorage, fill status, 50 entries) |
-| Performance chart (actual vs target) | not present | not present | **shipped** (7 days, 5-min snapshots) |
+| Performance chart (actual vs target) | — | — | **shipped** (7 days, 5-min snapshots) |
 | On-chain balance reads | simulated | **shipped** (mainnet ERC-20 + SoDEX testnet account) | shipped |
-| Dashboard API inspector | not present | shipped | + signals and auto-execution entries |
+| Dashboard API inspector | — | shipped | + signals and auto-execution entries |
 | Documentation site | shipped | shipped | shipped |
 
-### Wave 3 verification
+## Observability
 
-The dashboard exposes everything the agent does. The Market Signal chip shows the current urgency with a tooltip listing each contributing signal and its source (real ETF flow vs labeled momentum proxy). The Live API calls tray logs every `/api/prices`, `/api/signals`, `/api/briefing`, and `/api/sodex` request with status, latency, and (for the briefing) token usage; auto-executions appear there and in the activity log tagged `auto`. Server logs mirror the same data under `[prices]`, `[signals]`, `[briefing]`, and `[sodex]` prefixes.
+The dashboard exposes everything the agent does:
+
+- **Market Signal chip** — current urgency with a tooltip listing each contributing signal and its source (real ETF flow vs labeled momentum proxy).
+- **Live API calls tray** — every `/api/prices`, `/api/signals`, `/api/briefing`, and `/api/sodex` request with status, latency, and (for the briefing) token usage. Auto-executions appear here and in the activity log tagged `auto`.
+- **Server logs** — the same data mirrored to stdout under `[prices]`, `[signals]`, `[briefing]`, and `[sodex]` prefixes, including token usage and prompt-cache hit metrics per briefing call.
 
 ## Security posture
 

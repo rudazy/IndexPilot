@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# session working notes (contain operational metadata; never public)
+tasks/
+
 # vercel
 .vercel
 
